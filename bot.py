@@ -21,7 +21,7 @@ def admin_decorator(func):
         user = args[1].bot.get_chat_member(
             args[0].message.chat_id,
             args[0].message.from_user.id)
-        if user.status not in ['creator', 'admin']:
+        if user.status not in ['creator', 'administrator']:
             args[1].bot.send_message(
                 chat_id=args[0].message.chat_id,
                 text=not_admin_text)
@@ -40,14 +40,6 @@ def add_trigger(update, context, edit=None):
     trigger = update.message.text.replace('++add ', '') if not edit else update.message.text.replace('++edit ', '')
     chat_id = update.message.chat_id
     value = None
-
-    user = context.bot.get_chat_member(
-        update.message.chat_id, update.message.from_user.id)
-    if user.status not in ['creator', 'admin']:
-        context.bot.send_message(
-            chat_id=chat_id,
-            text=not_admin_text)
-        return
 
     if update.message.reply_to_message:
         if update.message.reply_to_message.text:
@@ -130,6 +122,8 @@ def del_trigger(update, context):
 
 
 def trigger_me(update, context):
+    if update.edited_message:
+        return
     chat_id = update.message.chat_id
     trigger_name = update.message.text
     trigger = find_trigger(chat_id, trigger_name)
