@@ -87,7 +87,7 @@ def get_all_ali_spots(chat_id=None):
 
 
 def delete_ali_spot(chat_id, code_spot):
-    spot = Alliance.get_or_none(chat_id=chat_id, code_spot=code_spot)
+    spot = Alliance.get_or_none(chat_id=chat_id, code=code_spot)
     if spot:
         spot.delete_instance()
         return True
