@@ -22,3 +22,14 @@ class TimeTrigger(Model):
     class Meta:
         primary_key = CompositeKey('chat_id', 'time')
         database = db
+
+
+class Alliance(Model):
+    name = CharField()
+    code = CharField()
+    spot_type = CharField()
+    chat_id = IntegerField()
+
+    class Meta:
+        primary_key = CompositeKey('code', 'chat_id')
+        database = db

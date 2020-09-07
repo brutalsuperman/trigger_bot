@@ -1,4 +1,4 @@
-from models import TimeTrigger, Trigger
+from models import Alliance, TimeTrigger, Trigger
 from peewee import IntegrityError
 
 
@@ -69,3 +69,26 @@ def get_all_time_triggers(chat_id=None):
     else:
         triggers = TimeTrigger.select()
     return triggers or None
+
+
+def create_spot(name, code, spot_type, chat_id):
+    try:
+        spot = Alliance.create(
+            name=name, code=code, spot_type=spot_type, chat_id=chat_id)
+    except IntegrityError:
+        return False
+    return spot
+
+
+def get_all_ali_spots(chat_id=None):
+    if chat_id:
+        spots = Alliance.select().where(Alliance.chat_id == chat_id)
+    return spots or None
+
+
+def delete_ali_spot(chat_id, code_spot):
+    spot = Alliance.get_or_none(chat_id=chat_id, code_spot=code_spot)
+    if spot:
+        spot.delete_instance()
+        return True
+    return False
