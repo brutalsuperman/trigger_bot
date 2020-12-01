@@ -17,13 +17,15 @@ from telegram.ext import (CallbackQueryHandler, ChosenInlineResultHandler,
                           MessageHandler, Updater)
 from texts import *
 from utils import *
+from keyboards import menu_markup
 
 # Enable logging
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    level=logging.INFO)
+    level=logging.WARNING)
 
 logger = logging.getLogger(__name__)
+user_data = {}
 
 
 def admin_decorator(func):
@@ -42,7 +44,7 @@ def admin_decorator(func):
 
 def start(update, context):
     """Send a message when the command /start is issued."""
-    help(update, context)
+    update.message.reply_text(text="Бот отряда OGW", reply_markup=menu_markup())
 
 
 @admin_decorator
@@ -132,33 +134,95 @@ def del_trigger(update, context):
 
 
 def trigger_me(update, context):
-    svodki_channel = -1001401627995  # -1001486183416
-    order_of_grey_wolf = -1001168950089  # -394357133
-
-    if update.message.forward_from and update.message.forward_from.id == 265204902:
-        if re.search(r'Code \d+ to authorize {}'.format(api_login), update.message.text):
-            user_id = update.message.from_user.id
-            code = re.search(r'Code (\d+) to authorize {}'.format(api_login), update.message.text).groups()[0]
-            process_code(user_id, code)
+    svodki_channel = -1001486183416  # -1001401627995
+    order_of_grey_wolf = -394357133   # -1001168950089
+    if update.message:
+        if update.message.forward_from and update.message.forward_from.id == 265204902:
+            if re.search(r'Code \d+ to authorize {}'.format(api_login), update.message.text):
+                user_id = update.message.from_user.id
+                code = re.search(r'Code (\d+) to authorize {}'.format(api_login), update.message.text).groups()[0]
+                process_code(user_id, code)
+        elif update.message.text.startswith("💰"):
+            gs(update, context)
+        elif update.message.text.startswith("📦"):
+            stock(update, context)
 
     if update.channel_post and update.channel_post.chat.id == svodki_channel:
         report = update._effective_message.text
+        if '🤝Headquarters news:' in update._effective_message.text:
+            text = update._effective_message.text
+            alli_reg = r'\n(?P<alliance>[\w\s]+) was (.*\n){1,3}🎖Defense:(.*)'
+            alli_def = re.findall(alli_reg, text)
+            if alli_def:
+                for alli in alli_def:
+                    alliance = alli[0].strip()
+                    guilds = re.findall(r'(?P<castle>☘️|🍆|🌹|🐢|🖤|🍁|🦇)(?P<guild>.?\[\w+\])', alli[-1])
+                    if guilds:
+                        guilds = [x[0] + x[1] for x in guilds]
+                        for guild in guilds:
+                            last_seen = update.channel_post.forward_date
+                            create_alliances_spot(alliance, guild, last_seen, type='guilds')
+
+        elif '🗺State of map:' in update._effective_message.text:
+            text = update._effective_message.text
+            alli_reg = r'(?:\n|$)(?P<spot_name>[\w\d\s.]+)belongs to (?P<alliance_name>.*)\.'
+            alli_spot = re.findall(alli_reg, text)
+            if alli_spot:
+                for spot in alli_spot:
+                    last_seen = update.channel_post.forward_date
+                    create_alliances_spot(spot[1].strip(), spot[0].strip(), last_seen, type='spots')
+
         if not context.chat_data.get('top', False):
             context.chat_data['top'] = []
+            context.chat_data['worst'] = []
 
         top = []  # 🦇🐺[OGW]Альрия
+        top_worst = []
         guilds = ['OGW', 'SIF', 'STG']
+        temp_worst = re.findall(r'🛡 В битве у ворот (☘️|🍆|🌹|🐢|🖤|🍁)(.*)\n🎖Лидеры атаки:(.*)\n🎖Лидеры защиты:', report)
         for guild in guilds:
             best = []
-            best = re.findall(r'\[{}\]([\w\d\s\-\_]+)[ |,|\n]'.format(guild), report)
+            worst = []
+
+            if temp_worst:
+                for castle in temp_worst:
+                    if re.findall(r'\[{}]([\w\d\s\-\_]+)[ |,|\n]'.format(guild), castle[2]):
+                        worst += (castle[0], re.findall(r'\[{}]([\w\d\s\-\_]+)[ |,|\n]'.format(guild), castle[2]))
+            best = re.findall(r'\[{}]([\w\d\s\-\_]+)[ |,|\n]'.format(guild), report)
+            if worst:
+                top_worst.append(worst)
             if best:
+                if top_worst:
+                    for castle in top_worst:
+                        for vtik in castle[1]:
+                            if vtik in best:
+                                best.remove(vtik)
                 top += best
-        if top:
+        if top or top_worst:
             context.chat_data['top'] += top
+            context.chat_data['worst'] += top_worst
 
         if 'По итогам сражений замкам начислено' in report:
-            if context.chat_data.get('top', []):
-                text = 'Вот они наши звёзды {}'.format(', '.join(context.chat_data.get('top', [])))
+            text = ''
+            if context.chat_data.get('top', []) or context.chat_data.get('worst', []):
+                if context.chat_data.get('top', []):
+                    text = '💪⭐️Вот они наши звёзды {}'.format(', '.join(context.chat_data.get('top', [])))
+                if context.chat_data.get('worst', []):
+                    text += '\n\n🙈😱Анти топ:\n'.format()
+                    for hero in context.chat_data.get('worst', []):
+                        hero[1] = ', '.join(hero[1])
+                        if hero[0] == '🐢':
+                            text += 'Как там говорят он на этом <s>собаку</s> черепаху съел, так вот это про {}'.format(hero[1])
+                        elif hero[0] == '🌹':
+                            text += '{} если ты хотел нарвать девочкам цветов, не обязательно было топтать всю клумбу'.format(hero[1])
+                        elif hero[0] == '🍁':
+                            text += '{} давно хотел оладушек с кленовым сиропом'.format(hero[1])
+                        elif hero[0] == '🍆':
+                            text += '{} эти баклажаны на закрутки?'.format(hero[1])
+                        elif hero[0] == '🖤':
+                            text += '{}, зачем тебе это чёрное сердечко, лучше вот тебе наше❤️'.format(hero[1])
+                        elif hero[0] == '☘️' or hero[0] == '☘':
+                            text += '{}, пока ты ищешь клевер с четырьмя лепестками, удача тихонько проходит мимо.'.format(hero[1])
                 context.bot.send_message(chat_id=order_of_grey_wolf, text=text, parse_mode='html')
             else:
                 text = 'Увы, никто не попал в топ'
@@ -537,6 +601,11 @@ def reports(update, context):
     chat_id = update.message.chat_id
     guild, nickname, retro = None, None, None
     extra = update.message.text.replace('/reports', '').strip()
+    re_exp = r'🔥Exp: ([-\d]+)'
+    re_gold = r'💰Gold: ([-\d]+)'
+    re_stock = r'📦Stock: ([-\d]+)'
+    re_hp = r'❤️Hp: ([-\d]+)'
+    re_atk = r'⚔:(\d+) 🛡|⚔:(\d+)\([+\-\d]+\)'
     if extra:
         try:
             retro = abs(int(extra))
@@ -547,66 +616,107 @@ def reports(update, context):
             guild = extra
         else:
             nickname = extra
-    if date.hour >= 6 and date.hour < 14:
-        date = date.replace(hour=6, minute=0, second=0)
-    elif date.hour >= 14 and date.hour < 22:
-        date = date.replace(hour=14, minute=0, second=0)
-    else:
-        if date.hour >= 22:
-            date = date.replace(hour=22, minute=0, second=0)
-        elif date.hour < 6:
-            date = date.replace(day=date.day - 1, hour=22, minute=0, second=0)
-    prev_date = date - timedelta(hours=8)
-    reports = find_report(chat_id, date)
-    prev_reports = find_report(chat_id, prev_date)
-    if guild:
-        prev_reports = [x for x in prev_reports if guild in x.text]
-    prev_nicks = [x.nickname for x in prev_reports]
-    date = date.astimezone(pytz.timezone(TIMEZONE))
-    text = 'Битва за ' + date.strftime('%H:%M %d.%m.%Y')
-    exp, gold, stock, hp, atk = 0, 0, 0, 0, 0
-    if reports:
-        text += '\nРепорты сдали: \n'
-
-        for report in reports:
-            if report.nickname in prev_nicks:
-                prev_nicks.remove(report.nickname)
-
-            if guild:
-                if guild not in report.text:
-                    continue
-
-            if '🏅' in report.text:
-                text += '🏅' + report.nickname + '\n'
-            elif '🔥Exp' not in report.text:
-                text += '🚧' + report.nickname + '\n'
-            else:
-                text += report.nickname + '\n'
-            re_exp = r'🔥Exp: ([-\d]+)'
-            re_gold = r'💰Gold: ([-\d]+)'
-            re_stock = r'📦Stock: ([-\d]+)'
-            re_hp = r'❤️Hp: ([-\d]+)'
-            re_atk = r'⚔:(\d+) 🛡|⚔:(\d+)\([+\-\d]+\)'
-
-            if re.search(re_exp, report.text):
-                exp += int(re.search(re_exp, report.text).groups()[0])
-            if re.search(re_gold, report.text):
-                gold += int(re.search(re_gold, report.text).groups()[0])
-            if re.search(re_stock, report.text):
-                stock += int(re.search(re_stock, report.text).groups()[0])
-            if re.search(re_hp, report.text):
-                hp += int(re.search(re_hp, report.text).groups()[0])
-            if re.search(re_atk, report.text):
-                atk += int(
-                    [x.strip() for x in re.search(re_atk, report.text).groups() if x is not None][0])
+    if nickname:
+        if update.message.from_user.id in [252167939, 122440518, 217906579, 467638790, 837889450]:
+            reports = find_report(-1001168950089, date, nickname)
+        else:
+            reports = find_report(chat_id, date, nickname)
+        text = ''
+        if reports:
+            text += 'Статистика репортов {}'.format(reports[0].nickname)
+            prev_date = None
+            for report in reports[:21]:
+                exp, gold, stock, hp, atk = 0, 0, 0, 0, 0
+                date = report.date  # 2020-10-18 06:00:00+00:00
+                date = date + timedelta(hours=3)  # report.date + timedelta(hours=3)
+                if prev_date:
+                    while True:
+                        diff = prev_date - date
+                        days, seconds = diff.days, diff.seconds
+                        hours = days * 24 + seconds // 3600
+                        if hours > 8:
+                            prev_date = prev_date - timedelta(hours=8)
+                            text += '\n{}🚧'.format(prev_date.strftime('%H:%M %d.%m.%Y'))
+                        else:
+                            break
+                prev_date = date
+                if re.search(re_exp, report.text):
+                    exp = int(re.search(re_exp, report.text).groups()[0])
+                if re.search(re_gold, report.text):
+                    gold = int(re.search(re_gold, report.text).groups()[0])
+                if re.search(re_stock, report.text):
+                    stock = int(re.search(re_stock, report.text).groups()[0])
+                if re.search(re_hp, report.text):
+                    hp = int(re.search(re_hp, report.text).groups()[0])
+                if re.search(re_atk, report.text):
+                    atk = int(
+                        [x.strip() for x in re.search(re_atk, report.text).groups() if x is not None][0])
+                text += '\n{} ⚔{} 🔥{} 💰{} 📦{} ❤️{}'.format(date.strftime('%H:%M %d.%m.%Y'), atk, exp, gold, stock, hp)
+            context.bot.send_message(chat_id=chat_id, text=text)
+        else:
+            text += '\nРепортов нет'
+            context.bot.send_message(chat_id=chat_id, text=text)
 
     else:
-        text += '\nРепортов нет'
-    text += '\n ⚔{} 🔥{} 💰{} 📦{} ❤️{}'.format(atk, exp, gold, stock, hp)
-    context.bot.send_message(chat_id=chat_id, text=text)
-    if prev_nicks:
-        text = 'Судя по прошлой битве репорты еще не сдали {}'.format(', '.join(prev_nicks))
+        if date.hour >= 6 and date.hour < 14:
+            date = date.replace(hour=6, minute=0, second=0)
+        elif date.hour >= 14 and date.hour < 22:
+            date = date.replace(hour=14, minute=0, second=0)
+        else:
+            if date.hour >= 22:
+                date = date.replace(hour=22, minute=0, second=0)
+            elif date.hour < 6:
+                date = date.replace(day=date.day - 1, hour=22, minute=0, second=0)
+        prev_date = date - timedelta(hours=8)
+        if update.message.from_user.id in [252167939, 122440518, 217906579, 467638790, 837889450]:
+            reports = find_report(-1001168950089, date, nickname)
+            prev_reports = find_report(-1001168950089, prev_date)
+        else:
+            reports = find_report(chat_id, date)
+            prev_reports = find_report(chat_id, prev_date)
+        if guild:
+            prev_reports = [x for x in prev_reports if guild in x.text]
+        prev_nicks = [x.nickname for x in prev_reports]
+        date = date.astimezone(pytz.timezone(TIMEZONE))
+        text = 'Битва за ' + date.strftime('%H:%M %d.%m.%Y')
+        exp, gold, stock, hp, atk = 0, 0, 0, 0, 0
+        if reports:
+            text += '\nРепорты сдали: \n'
+
+            for report in reports:
+                if report.nickname in prev_nicks:
+                    prev_nicks.remove(report.nickname)
+
+                if guild:
+                    if guild not in report.text:
+                        continue
+
+                if '🏅' in report.text:
+                    text += '🏅' + report.nickname + '\n'
+                elif '🔥Exp' not in report.text:
+                    text += '🚧' + report.nickname + '\n'
+                else:
+                    text += report.nickname + '\n'
+
+                if re.search(re_exp, report.text):
+                    exp += int(re.search(re_exp, report.text).groups()[0])
+                if re.search(re_gold, report.text):
+                    gold += int(re.search(re_gold, report.text).groups()[0])
+                if re.search(re_stock, report.text):
+                    stock += int(re.search(re_stock, report.text).groups()[0])
+                if re.search(re_hp, report.text):
+                    hp += int(re.search(re_hp, report.text).groups()[0])
+                if re.search(re_atk, report.text):
+                    atk += int(
+                        [x.strip() for x in re.search(re_atk, report.text).groups() if x is not None][0])
+
+        else:
+            text += '\nРепортов нет'
+        text += '\n ⚔{} 🔥{} 💰{} 📦{} ❤️{}'.format(atk, exp, gold, stock, hp)
         context.bot.send_message(chat_id=chat_id, text=text)
+        if prev_nicks:
+            text = 'Судя по прошлой битве репорты еще не сдали {}'.format(', '.join(prev_nicks))
+            context.bot.send_message(chat_id=chat_id, text=text)
 
 
 def me(update, context):
@@ -617,6 +727,33 @@ def me(update, context):
         context.bot.send_message(chat_id=chat_id, text=first_auth_text)
     else:
         cw_api.request_action(token=token.token, action='requestProfile')
+
+
+def auth_guild(update, context):
+    chat_id = update.message.chat_id
+    user_id = update.message.from_user.id
+    token = find_token(user_id)
+    if not token:
+        context.bot.send_message(chat_id=chat_id, text=first_auth_text)
+    else:
+        cw_api.authAdditionalOperation(token.token, operation='GuildInfo')
+
+
+def guild(update, context):
+    chat_id = update.message.chat_id
+    user_id = update.message.from_user.id
+    token = find_token(user_id)
+    if not token:
+        context.bot.send_message(chat_id=chat_id, text=first_auth_text)
+    else:
+        cw_api.request_action(token.token, action='guildInfo')
+
+
+def glory_update(context):
+    user_data = get_user_data(chat_id=None, type='guildInfo')
+    for user in user_data:
+        token = find_token(user.chat_id)
+        cw_api.request_action(token.token, action='guildInfo')
 
 
 def auth(update, context):
@@ -654,12 +791,47 @@ def process_code(user_id, code):
             cw_api.grantAdditionalOperation(token.token, request.req_id, code)
 
 
+from threading import Thread
+
+
+class SpendThread(Thread):
+    def __init__(self, chat_id, rule, context):
+        Thread.__init__(self)
+        self.chat_id = chat_id
+        self.rule = rule
+        self.context = context
+
+    def run(self):
+        spend_gold(self.chat_id, self.rule, self.context)
+
+
 def auto_spend_gold(context):
-    print(1)
+    print('start auto spend')
     gr = get_all_rules()
     for rule in gr:
-        print(rule.chat_id)
-        spend_gold(rule.chat_id, rule, context)
+        thread = SpendThread(rule.chat_id, rule, context)
+        thread.start()
+        print('start for {}'.format(rule.chat_id))
+    #     logger.warning('spending gold for {}'.format(rule.chat_id))
+    #     try:
+    #         spend_gold(rule.chat_id, rule, context)
+    #     except:
+    #         print('need start bot {}'.format(rule.chat_id))
+
+
+def gs_enable(update, context):
+    chat_id = update.message.from_user.id
+    update_rules(chat_id, True)
+    context.bot.send_message(chat_id, text=auto_enabled)
+    pass
+
+
+def gs_disable(update, context):
+    chat_id = update.message.from_user.id
+    logger.warning('spending gold for {}'.format(chat_id))
+    update_rules(chat_id, False)
+    context.bot.send_message(chat_id, text=auto_disable)
+    pass
 
 
 def spend_my_gold(update, context):
@@ -668,7 +840,32 @@ def spend_my_gold(update, context):
     spend_gold(chat_id, rule, context)
 
 
+def gs(update, context):
+    chat_id = update.message.from_user.id
+    rule = get_my_rules(chat_id)
+    if rule:
+        if rule.auto:
+            a = '✅'
+        else:
+            a = '❌'
+
+        text = '{} Автослив\n'.format(a)
+        text += '\nПравила слива: \n{}\n\n'.format(rule.rules.replace('/gs ', ''))
+        text += '/spend Слить сейчас\n'
+        text += '/gs_enable Включить автослив\n'
+        text += '/gs_disable Выключить автослив\n'
+        context.bot.send_message(chat_id, text=text)
+    else:
+        token = find_token(chat_id)
+        if not token:
+            text = 'Надо пройти авторизацию /auth, мне нужен доступ к /wtb чтобы покупать и /profile чтобы знать сколько у тебя голды'
+            context.bot.send_message(chat_id, text=text)
+        else:
+            context.bot.send_message(chat_id, text=no_rules_text)
+
+
 def spend_gold(chat_id, rule, context):
+    global user_data
     if not rule:
         context.bot.send_message(chat_id, text=no_rules_text)
     delete_log(rule.chat_id, None)
@@ -699,19 +896,20 @@ def spend_gold(chat_id, rule, context):
             if log:
                 if log.status == 'Ok':
                     user_gold -= log.quantity * log.price
-                    if not context.user_data.get('m_id', False):
+                    if not user_data.get(rule.chat_id) or not user_data.get(rule.chat_id).get('m_id', False):
                         message = context.bot.send_message(
                             rule.chat_id,
                             text='Купил {}x{} по {}'.format(log.item, log.quantity, log.price))
-                        context.user_data['m_id'] = message.message_id
-                        context.user_data['m_text'] = message.text
+                        user_data[rule.chat_id] = {}
+                        user_data[rule.chat_id]['m_id'] = message.message_id
+                        user_data[rule.chat_id]['m_text'] = message.text
 
                     else:
-                        text = context.user_data.get('m_text', False)
+                        text = user_data[rule.chat_id].get('m_text', '')
                         text += '\nКупил {}x{} по {}'.format(log.item, log.quantity, log.price)
                         context.bot.edit_message_text(
                             chat_id=rule.chat_id,
-                            message_id=context.user_data.get('m_id', False),
+                            message_id=user_data[rule.chat_id].get('m_id', False),
                             text=text)
                     rules.pop(0)
                     delete_log(chat_id=rule.chat_id, status='Ok')
@@ -721,24 +919,28 @@ def spend_gold(chat_id, rule, context):
                     else:
                         rules.pop(0)
                     delete_log(chat_id=rule.chat_id, status='NoOffersFoundByPrice')
-                elif log.status == 'BattleIsNear':
-                    delete_log(chat_id=rule.chat_id, status='BattleIsNear')
+                # elif log.status == 'BattleIsNear':
+                #     delete_log(chat_id=rule.chat_id, status='BattleIsNear')
+                #     break
+                elif log.status:
+                    context.bot.send_message(chat_id=rule.chat_id, text='Error: {}'.format(log.status))
+                    delete_log(chat_id=rule.chat_id)
                     break
                 else:
                     time.sleep(1)
-        context.user_data['m_id'] = False
-        context.user_data['m_text'] = False
-        context.bot.send_message(chat_id=rule.chat_id, text='Слив окончен')
+        if user_data.get(rule.chat_id, False):
+            user_data[rule.chat_id]['m_id'] = False
+            user_data[rule.chat_id]['m_text'] = False
+        context.bot.send_message(chat_id=rule.chat_id, text='Слив окончен, осталось {}'.format(user_gold))
 
 
 def gold_rules(update, context):
     user_id = update.message.from_user.id
     text = update.message.text
     if not re.search(r'/gs[\n\s]+', text) or len(text.split('\n')) <= 1:
-        print(text)
         context.bot.send_message(chat_id=user_id, text=gold_rules_bad_format_text)
     else:
-        rules = '\n'.join([x for x in text.split('\n') if re.search(r'\d+ \d+', x)])
+        rules = '\n'.join([x.strip() for x in text.split('\n') if re.search(r'\d+ \d+', x)])
         create_rules(user_id, rules)
         context.bot.send_message(chat_id=user_id, text=gold_rules_save_text)
 
@@ -763,26 +965,44 @@ def auth_stock(update, context):
 
 
 def inlinequery(update, context):
+    global user_data
     query = update.inline_query.query
     user_id = update.inline_query.from_user.id
+    if not user_data.get(user_id):
+        user_data[user_id] = {}
+        user_data[user_id]['stock'] = {}
     stock = get_stock(chat_id=user_id, type='requestStock')
-    stock = json.loads(stock.data)
+    user_data[user_id]['stock'] = json.loads(stock.data)
+    stock = user_data[user_id]['stock']
     results = []
-    for key, value in stock.items():
-        if query != 'b':
+    if query in ['-', '+']:
+        if query == '-':
+            stock = sorted(stock.items(), key=lambda x: x[1].get('value', 0))
+        elif query == '+':
+            stock = sorted(stock.items(), key=lambda x: x[1].get('value', 0), reverse=True)
+        for key, value in stock:
             results.append(
                 InlineQueryResultArticle(
                     id=key,
                     title='{} x {}'.format(value.get('name'), value.get('value')),
                     input_message_content=InputTextMessageContent('/g_deposit {} {}'.format(
                         key, value.get('value')))))
-        else:
-            results.append(
-                InlineQueryResultArticle(
-                    id=key,
-                    title='{} x {}'.format(value.get('name'), value.get('value')),
-                    input_message_content=InputTextMessageContent('/wts_{}_{}_2500'.format(
-                        key, value.get('value')))))
+    else:
+        for key, value in stock.items():
+            if query != 'b':
+                results.append(
+                    InlineQueryResultArticle(
+                        id=key,
+                        title='{} x {}'.format(value.get('name'), value.get('value')),
+                        input_message_content=InputTextMessageContent('/g_deposit {} {}'.format(
+                            key, value.get('value')))))
+            elif query == 'b':
+                results.append(
+                    InlineQueryResultArticle(
+                        id=key,
+                        title='{} x {}'.format(value.get('name'), value.get('value')),
+                        input_message_content=InputTextMessageContent('/wts_{}_{}_2500'.format(
+                            key, value.get('value')))))
     results = results[:50]
     if not len(results):
         results.append(InlineQueryResultArticle(
@@ -803,6 +1023,47 @@ def on_result_chosen(update, context):
     create_user_data(user_id, type='requestStock', data=json.dumps(stock))
 
 
+def a_guilds(update, context):
+    extra = update.message.text.replace('/a_guilds', '').strip()
+    chat_id = update.message.chat_id
+
+    all_guilds = get_all_alliances(alliance=extra, type='guilds')
+    temp_data = {}
+    for guild in all_guilds:
+        alli_name_code = guild.alliance + ' ' + '<code>' + guild.extra.code + '</code>'
+        if not temp_data.get(alli_name_code):
+            temp_data[alli_name_code] = []
+        temp_data[alli_name_code].append('{} last_seen {}:00'.format(
+            guild.name, guild.date.astimezone(pytz.timezone(TIMEZONE)).strftime("%d.%m %H")))
+
+    text = ''
+    for key, value in temp_data.items():
+        text += '\n{}\n{}\n'.format(key, '\n'.join(value))
+
+    context.bot.send_message(chat_id=chat_id, text=text, parse_mode='HTML')
+
+
+def a_spots(update, context):
+    extra = update.message.text.replace('/a_spots', '').strip()
+    chat_id = update.message.chat_id
+
+    all_spots = get_all_alliances(alliance=extra, type='spots')
+    temp_data = {}
+    for spot in all_spots:
+        alli_name_code = spot.alliance + ' ' + '`' + spot.extra.code + '`'
+        if not temp_data.get(alli_name_code):
+            temp_data[alli_name_code] = []
+
+        temp_data[alli_name_code].append('{} captured {}:00'.format(
+            spot.name, spot.date.astimezone(pytz.timezone(TIMEZONE)).strftime("%d.%m %H")))
+
+    text = ''
+    for key, value in temp_data.items():
+        text += '\n{}\n{}\n'.format(key, '\n'.join(value))
+
+    context.bot.send_message(chat_id=chat_id, text=text, parse_mode='Markdown')
+
+
 def main():
 
     # Get the dispatcher to register handlers
@@ -819,6 +1080,12 @@ def main():
     dp.add_handler(CommandHandler("spend", spend_my_gold))
     dp.add_handler(CommandHandler("stock", stock))
     dp.add_handler(CommandHandler("auth_stock", auth_stock))
+    dp.add_handler(CommandHandler("gs_enable", gs_enable))
+    dp.add_handler(CommandHandler("gs_disable", gs_disable))
+    dp.add_handler(CommandHandler("auth_guild", auth_guild))
+    dp.add_handler(CommandHandler("guild", guild))
+    dp.add_handler(CommandHandler("a_guilds", a_guilds))
+    dp.add_handler(CommandHandler("a_spots", a_spots))
 
     dp.add_handler(InlineQueryHandler(inlinequery))
     dp.add_handler(ChosenInlineResultHandler(on_result_chosen))
@@ -873,21 +1140,24 @@ def start_time_triggers():
         trigger_time = now.replace(hour=0, minute=45, second=0)
 
     first = (trigger_time - now).seconds
+    print('first will be in {} sec'.format(first))
     job.run_repeating(auto_spend_gold, interval=28800, first=first)
+
+    job.run_repeating(glory_update, interval=360, first=0)
 
 
 def init_db():
     db.connect()
-    from models import Report, Token, Request, UserData, GoldRules, WtbLogs
+    from models import Report, Token, Request, UserData, GoldRules, WtbLogs, Alliances
     db.create_tables(
-        [Trigger, TimeTrigger, Alliance, Report, Token, Request,
-         UserData, GoldRules, WtbLogs], safe=True)
+        [Trigger, TimeTrigger, Spot, Report, Token, Request,
+         UserData, GoldRules, WtbLogs, Alliances], safe=True)
     db.close()
 
 
 updater = Updater(TOKEN, use_context=True)
 job = updater.job_queue
-db = PostgresqlDatabase('ogwbot', user='ogw')
+db = PostgresqlDatabase('ogwbot', user='ogw', password='kalavera', autorollback=True)
 
 
 if __name__ == '__main__':

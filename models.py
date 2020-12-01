@@ -7,7 +7,7 @@ class Trigger(Model):
     trigger_name = CharField()
     chat_id = IntegerField()
     trigger_type = CharField()
-    trigger_value = CharField()
+    trigger_value = TextField()
 
     class Meta:
         primary_key = CompositeKey('trigger_name', 'chat_id')
@@ -18,14 +18,14 @@ class TimeTrigger(Model):
     chat_id = IntegerField()
     time = CharField()
     trigger_type = CharField()
-    trigger_value = CharField()
+    trigger_value = TextField()
 
     class Meta:
         primary_key = CompositeKey('chat_id', 'time')
         database = db
 
 
-class Alliance(Model):
+class Spot(Model):
     name = CharField()
     code = CharField()
     spot_type = CharField()
@@ -33,6 +33,17 @@ class Alliance(Model):
 
     class Meta:
         primary_key = CompositeKey('code', 'chat_id')
+        database = db
+
+
+class Alliances(Model):
+    name = CharField()
+    alliance = CharField()
+    type = CharField()
+    date = DateTimeField()
+
+    class Meta:
+        primary_key = CompositeKey('name')
         database = db
 
 
@@ -78,6 +89,7 @@ class UserData(Model):
 class GoldRules(Model):
     chat_id = IntegerField(primary_key=True)
     rules = TextField()
+    auto = BooleanField(default=True)
 
     class Meta:
         database = db

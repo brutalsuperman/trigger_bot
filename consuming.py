@@ -76,8 +76,20 @@ def callback(ch, method, properties, body):
                         'name': value}
 
             utils.create_user_data(user_id, type='requestStock', data=json.dumps(new_dict))
-            text = 'Сток обновил, можно сдавать'
+            text = 'Сток обновил, можно сдавать. Открой @ChatWarsBot бота и напиши @OGWHelperbot после чего выбирай из списка.'
             send_message(user_id, text)
+        elif action == 'guildInfo':
+            old = utils.get_user_data(user_id, type='guildInfo')
+            old_glory = 0
+            if old:
+                old = json.loads(old.data)
+                old_glory = old.get('glory', 0)
+
+            new_glory = payload.get('glory', 0)
+            if new_glory != old_glory:
+                text = '+{} гп'.format(new_glory - old_glory)
+                send_message(user_id, text)
+            utils.create_user_data(user_id, type='guildInfo', data=json.dumps(payload))
 
     if action == 'wantToBuy':
         user_id = payload.get('userId')

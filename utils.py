@@ -1,5 +1,5 @@
-from models import (Alliance, GoldRules, Report, Request, TimeTrigger, Token,
-                    Trigger, UserData, WtbLogs)
+from models import (Spot, GoldRules, Report, Request, TimeTrigger, Token,
+                    Trigger, UserData, WtbLogs, Alliances)
 from peewee import IntegrityError
 
 
@@ -74,7 +74,7 @@ def get_all_time_triggers(chat_id=None):
 
 def create_spot(name, code, spot_type, chat_id):
     try:
-        spot = Alliance.create(
+        spot = Spot.create(
             name=name, code=code, spot_type=spot_type, chat_id=chat_id)
     except IntegrityError:
         return False
@@ -83,12 +83,12 @@ def create_spot(name, code, spot_type, chat_id):
 
 def get_all_ali_spots(chat_id=None):
     if chat_id:
-        spots = Alliance.select().where(Alliance.chat_id == chat_id)
+        spots = Spot.select().where(Spot.chat_id == chat_id)
     return spots or None
 
 
 def delete_ali_spot(chat_id, code_spot):
-    spot = Alliance.get_or_none(chat_id=chat_id, code=code_spot)
+    spot = Spot.get_or_none(chat_id=chat_id, code=code_spot)
     if spot:
         spot.delete_instance()
         return True
@@ -104,9 +104,12 @@ def create_report(chat_id, nickname, text, date):
     return report
 
 
-def find_report(chat_id, date):
+def find_report(chat_id, date, nickname=None):
     if chat_id:
-        reports = Report.select().where(Report.chat_id == chat_id, Report.date == date).order_by(Report.nickname)
+        if not nickname:
+            reports = Report.select().where(Report.chat_id == chat_id, Report.date == date).order_by(Report.nickname)
+        else:
+            reports = Report.select().where(Report.chat_id == chat_id, Report.nickname == nickname).order_by(-Report.date)
         return reports
     return None
 
@@ -149,8 +152,11 @@ def create_user_data(chat_id, type, data):
         update={"data": data}).execute()
 
 
-def get_user_data(chat_id, type):
-    user_data = UserData.get_or_none(chat_id=chat_id, type=type)
+def get_user_data(chat_id=None, type=None):
+    if chat_id:
+        user_data = UserData.get_or_none(chat_id=chat_id, type=type)
+    else:
+        user_data = UserData.select().where(UserData.type == type)
     return user_data
 
 
@@ -161,13 +167,19 @@ def create_rules(chat_id, rules):
         update={"rules": rules}).execute()
 
 
+def update_rules(chat_id, auto=True):
+    rules = GoldRules.select().where(GoldRules.chat_id == chat_id).get()
+    rules.auto = auto
+    rules.save()
+
+
 def get_gold_rules(chat_id):
     gr = GoldRules.get_or_none(chat_id=chat_id)
     return gr
 
 
 def get_all_rules():
-    gr = GoldRules.select()
+    gr = GoldRules.select().where((GoldRules.auto == True) | (GoldRules.auto == None))
     return gr
 
 
@@ -194,7 +206,7 @@ def update_wtb_log(chat_id, date, status, quantity):
     wtb_logs.save()
 
 
-def delete_log(chat_id, status):
+def delete_log(chat_id, status=None):
     log = WtbLogs.get_or_none(chat_id=chat_id)
     if log:
         log.delete_instance()
@@ -205,3 +217,29 @@ def delete_log(chat_id, status):
 def get_stock(chat_id, type):
     stock = UserData.get_or_none(chat_id=chat_id, type=type)
     return stock
+
+
+def create_alliances_spot(alliance, guild, date, type=None):
+    created = Alliances.insert(name=guild, alliance=alliance, date=date, type=type).on_conflict(
+        conflict_target=(Alliances.name),
+        preserve=(Alliances.name),
+        update={
+            "alliance": alliance,
+            "date": date}).execute()
+
+    return created
+
+
+def get_all_alliances(alliance=None, type=None):
+    alliance_guilds = None
+    if alliance:
+        alliance_guilds = Alliances.select(Alliances, Spot).join(
+            Spot, on=(Alliances.alliance == Spot.name), attr='extra').where(
+                Alliances.alliance == alliance, Alliances.type == type).order_by(
+                    Alliances.date.desc())
+    else:
+        alliance_guilds = Alliances.select(Alliances, Spot).join(
+            Spot, on=(Alliances.alliance == Spot.name), attr='extra').where(
+                Alliances.type == type).order_by(
+                    Alliances.date.desc())
+    return alliance_guilds
