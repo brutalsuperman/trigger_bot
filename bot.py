@@ -172,6 +172,50 @@ def trigger_me(update, context):
                     last_seen = update.channel_post.forward_date
                     create_alliances_spot(spot[1].strip(), spot[0].strip(), last_seen, type='spots')
 
+        elif 'Результаты сражений:' in update._effective_message.text and 'По итогам сражений замкам начислено:' in update._effective_message.text:
+            text = update._effective_message.text
+
+            repl = r'По итогам сражений замкам начислено:([\d\D]+)'
+            worldtop = re.findall(repl, text)
+            if worldtop:
+
+                reg_action = r'(?P<emoj>.*)(?:В битве у ворот |Защитники )(?P<castle>.)'
+                reg_gold = r'(?:🏆Атакующие разграбили замок на |🏆У атакующих отобрали )(?P<gold>\d+) золотых монет'
+
+                gold_map = {}
+                for castle in text.split('\n\n'):
+                    gold = 0
+                    mobj = re.search(reg_action, castle)
+                    if mobj:
+                        extra_emo = ''
+                        if 'скучали, на них никто не напал.' in castle:
+                            extra_emo = '😴'
+                        elif 'со значительным преимуществом' in castle:
+                            extra_emo = '😎'
+                        elif 'защитники легко отбились' in castle:
+                            extra_emo = '👌'
+                        elif 'разыгралась настоящая бойня' in castle:
+                            extra_emo = '⚡️'
+                        temp_castle = mobj['castle']
+                        gold_map[temp_castle] = {'emoj': extra_emo + mobj['emoj']}
+                        mobj = re.search(reg_gold, castle)
+                        if mobj:
+                            if mobj['gold']:
+                                gold_map[temp_castle]['gold'] = mobj['gold']
+                            else:
+                                gold_map[temp_castle]['gold'] = 0
+
+                reg = r'\n(.)([\D\s]+)\+(?P<points>\d+)'
+                mobj = re.findall(reg, worldtop[0])
+                if mobj:
+                    date = date_to_cw_battle(update.channel_post.forward_date)
+                    old_date = date - timedelta(hours=8)
+                    for castle in mobj:
+                        add_world_top(
+                            emodji=castle[0], name=castle[1], points=castle[2], old_date=old_date,
+                            date=date, action=gold_map[castle[0]].get('emoj'), gold=gold_map[castle[0]].get('gold'))
+                    send_world_top(context, mid_id, date, extra=None)
+
         if not context.chat_data.get('top', False):
             context.chat_data['top'] = []
             context.chat_data['worst'] = []
@@ -317,16 +361,7 @@ def trigger_me(update, context):
     # reports
     if update.message.forward_from and update.message.forward_from.id == 265204902:
         if 'Твои результаты в бою:' in update.message.text and 'Встреча' not in update.message.text:
-            date = update.message.forward_date
-            if date.hour >= 6 and date.hour < 14:
-                date = date.replace(hour=6, minute=0, second=0)
-            elif date.hour >= 14 and date.hour < 22:
-                date = date.replace(hour=14, minute=0, second=0)
-            else:
-                if date.hour >= 22:
-                    date = date.replace(hour=22, minute=0, second=0)
-                elif date.hour < 6:
-                    date = date.replace(day=date.day - 1, hour=22, minute=0, second=0)
+            date = date_to_cw_battle(update.message.forward_date)
             reg_nick = r'🦇.\[\w+\]([\w\s_-]+)⚔|🦇([\w\s_-]+)⚔|🦇\[\w+\]([\w\s_-]+)⚔'
             nickname = re.match(reg_nick, update.message.text)
             if any(nickname.groups()):
@@ -334,6 +369,18 @@ def trigger_me(update, context):
             new_report = create_report(chat_id, nickname, update.message.text, date)
             if not new_report:
                 context.bot.send_message(chat_id=chat_id, text=old_report_text, parse_mode='html')
+
+    # update top
+    if update.message.forward_from and update.message.forward_from.id == 265204902:
+        castles = ['🐢Тортуга', '🌹Замок Рассвета', '🍁Амбер', '🦇Ночной Замок', '🖤Скала', 'очков']
+        date = date_to_cw_battle(update.message.forward_date)
+
+        if all([x in update.message.text for x in castles]):
+            reg = r'#\s\d\s(?P<emodji>.)(?P<name>[\D\s]+)(?P<points>\d+)'
+            mobj = re.findall(reg, update.message.text)
+            if mobj:
+                for obj in mobj:
+                    update_world_top(emodji=obj[0], name=obj[1], points=obj[2], date=date)
 
 
 def send_button(context, chat_id):
@@ -348,6 +395,27 @@ def send_button(context, chat_id):
 
 
 def inline_button(update, context):
+    castles = ['🦇', '☘️', '🍁', '🍆', '🌹', '🖤', '🐢']
+    if update.callback_query.data in castles:
+        user_id = update._effective_user.id
+        u_data = user_data[user_id]['calc']
+        rep = get_castle_gold(emodji=update.callback_query.data, date=u_data.get('date', None))
+        if rep:
+            if '🛡' in rep.action:
+                action = '🛡'
+                digits = int(int(u_data.get('def', 0)) / int(u_data.get('gold', 0))) * int(rep.gold)
+            elif '⚔' in rep.action:
+                action = '⚔'
+                digits = int(int(u_data.get('atk', 0)) / int(u_data.get('gold', 0))) * int(rep.gold)
+
+            if digits:
+                rep.digits = digits
+                rep.save()
+
+                update.callback_query.edit_message_text(
+                    text="{}{}{}".format(update.callback_query.data, action, digits))
+        return
+
     who = update.callback_query.to_dict().get('from', {}).get('id')
     if not context.chat_data.get('users', []):
         context.chat_data['users'] = set()
@@ -658,15 +726,7 @@ def reports(update, context):
             context.bot.send_message(chat_id=chat_id, text=text)
 
     else:
-        if date.hour >= 6 and date.hour < 14:
-            date = date.replace(hour=6, minute=0, second=0)
-        elif date.hour >= 14 and date.hour < 22:
-            date = date.replace(hour=14, minute=0, second=0)
-        else:
-            if date.hour >= 22:
-                date = date.replace(hour=22, minute=0, second=0)
-            elif date.hour < 6:
-                date = date.replace(day=date.day - 1, hour=22, minute=0, second=0)
+        date = date_to_cw_battle(date)
         prev_date = date - timedelta(hours=8)
         if update.message.from_user.id in [252167939, 122440518, 217906579, 467638790, 837889450]:
             reports = find_report(-1001168950089, date, nickname)
@@ -899,7 +959,8 @@ def spend_gold(chat_id, rule, context):
                     if not user_data.get(rule.chat_id) or not user_data.get(rule.chat_id).get('m_id', False):
                         message = context.bot.send_message(
                             rule.chat_id,
-                            text='Купил {}x{} по {}'.format(log.item, log.quantity, log.price))
+                            text='Купил {}x{} по {}'.format(log.item, log.quantity, log.price),
+                            disable_notification=True)
                         user_data[rule.chat_id] = {}
                         user_data[rule.chat_id]['m_id'] = message.message_id
                         user_data[rule.chat_id]['m_text'] = message.text
@@ -923,7 +984,8 @@ def spend_gold(chat_id, rule, context):
                 #     delete_log(chat_id=rule.chat_id, status='BattleIsNear')
                 #     break
                 elif log.status:
-                    context.bot.send_message(chat_id=rule.chat_id, text='Error: {}'.format(log.status))
+                    context.bot.send_message(
+                        chat_id=rule.chat_id, text='Error: {}'.format(log.status), disable_notification=True)
                     delete_log(chat_id=rule.chat_id)
                     break
                 else:
@@ -931,7 +993,8 @@ def spend_gold(chat_id, rule, context):
         if user_data.get(rule.chat_id, False):
             user_data[rule.chat_id]['m_id'] = False
             user_data[rule.chat_id]['m_text'] = False
-        context.bot.send_message(chat_id=rule.chat_id, text='Слив окончен, осталось {}'.format(user_gold))
+        context.bot.send_message(
+            chat_id=rule.chat_id, text='Слив окончен, осталось {}'.format(user_gold), disable_notification=True)
 
 
 def gold_rules(update, context):
@@ -1053,15 +1116,130 @@ def a_spots(update, context):
         alli_name_code = spot.alliance + ' ' + '`' + spot.extra.code + '`'
         if not temp_data.get(alli_name_code):
             temp_data[alli_name_code] = []
+        activate = ''
+        diff = datetime.utcnow() - spot.date
+        days, seconds = diff.days, diff.seconds
+        hours = days * 24 + seconds // 3600
+        if hours < 8:
+            activate = '🕡'
 
-        temp_data[alli_name_code].append('{} captured {}:00'.format(
-            spot.name, spot.date.astimezone(pytz.timezone(TIMEZONE)).strftime("%d.%m %H")))
+        if 'Mine' in spot.name:
+            spot_type = '📦'
+        elif 'Fort' in spot.name or 'Outpost' in spot.name or 'Tower' in spot.name:
+            spot_type = '🎖'
+        elif 'Ruins' in spot.name:
+            spot_type = '✨'
+        else:
+            spot_type = '❔'
+        temp_data[alli_name_code].append('{}{} captured {}:00 {}'.format(
+            spot_type, spot.name, spot.date.astimezone(pytz.timezone(TIMEZONE)).strftime("%d.%m %H"), activate))
 
     text = ''
     for key, value in temp_data.items():
         text += '\n{}\n{}\n'.format(key, '\n'.join(value))
 
     context.bot.send_message(chat_id=chat_id, text=text, parse_mode='Markdown')
+
+
+def worldtop(update, context):
+    date = update.message.date
+    chat_id = update.message.chat_id
+    extra = update.message.text.replace('/worldtop', '').strip()
+    send_world_top(context, chat_id, date, extra)
+
+
+def send_world_top(context, chat_id, date, extra=None):
+    retro = None
+    if extra:
+        try:
+            retro = abs(int(extra))
+            date = date - timedelta(hours=8 * retro)
+        except ValueError:
+            pass
+    date = date_to_cw_battle(date)
+    prev_date = date - timedelta(hours=8)
+    wt = get_all_world_top(date=date)
+    wt_ordering = [x.name for x in wt]
+    wt_points = [x.points for x in wt]
+    wt_old = get_all_world_top(date=prev_date)
+    if wt_old:
+        wt_ordering_old = [x.name for x in wt_old]
+        wt_points_old = [x.points for x in wt_old]
+    text = ''
+    counter = 0
+    for castle in wt:
+        counter += 1
+        move = '(▪️0)'
+        diff = 0
+        if wt_old:
+            if wt_ordering.index(castle.name) != wt_ordering_old.index(castle.name):
+                if wt_ordering.index(castle.name) < wt_ordering_old.index(castle.name):
+                    move = '(🔺{})'.format(abs(wt_ordering.index(castle.name) - wt_ordering_old.index(castle.name)))
+                else:
+                    move = '(🔻{})'.format(abs(wt_ordering.index(castle.name) - wt_ordering_old.index(castle.name)))
+            diff = int(wt_points[wt_ordering.index(castle.name)] - wt_points_old[wt_ordering_old.index(castle.name)])
+        len_points = len(str(wt[0].points))
+
+        if castle.digits:
+            text += '\n#{}{:<4} {} `{}`🏆(+{})`{}`{}'.format(
+                counter, move, castle.emodji, str(castle.points).rjust(len_points),
+                diff, castle.action, int(castle.digits))
+        else:
+            text += '\n#{}{:<4} {} `{}`🏆(+{})`{}`'.format(
+                counter, move, castle.emodji, str(castle.points).rjust(len_points), diff, castle.action,)
+    context.bot.send_message(chat_id=chat_id, text=text, parse_mode='Markdown')
+
+
+def calculate_atak(update, context):
+    global user_data
+    message = update.message
+    chat_id = update.message.chat_id
+    if update.message.reply_to_message:
+        message = update.message.reply_to_message
+        if message.forward_from and message.forward_from.id == 265204902 and 'Твои результаты в бою:' in message.text:
+            m_text = message.text
+            m_date = date_to_cw_battle(message.forward_date)
+            re_atk = r'⚔:(?P<atk>\d+).* 🛡:(?P<def>\d+)'
+            re_gold = r'💰Gold: (?P<gold>[-\d]+)'
+
+            e = re.search(re_atk, m_text)
+            x = re.search(re_gold, m_text)
+            if not user_data.get(update.message.from_user.id, False):
+                user_data[update.message.from_user.id] = {}
+            user_data[update.message.from_user.id]['calc'] = dict(e.groupdict(), **x.groupdict(), **{"date": m_date})
+        else:
+            date = date_to_cw_battle(message.date)
+            reg = r'(?P<digit>\d+) (?P<gold>\d+)'
+            find = re.search(reg, message.text)
+            if find:
+                temp_dict = find.groupdict()
+                temp_dict['atk'] = temp_dict['def'] = temp_dict['digit']
+                del temp_dict['digit']
+                if not user_data.get(update.message.from_user.id, False):
+                    user_data[update.message.from_user.id] = {}
+                user_data[update.message.from_user.id]['calc'] = dict(temp_dict, **{"date": date})
+            else:
+                return
+
+        castles = ['🦇', '☘️', '🍁', '🍆', '🌹', '🖤', '🐢']
+        keyboard = []
+        row = []
+        for castle in castles:
+            if len(row) > 3:
+                keyboard.append(row)
+                row = []
+
+            row.append(InlineKeyboardButton(text=castle, callback_data=castle))
+        keyboard.append(row)
+        reply_markup = InlineKeyboardMarkup(inline_keyboard=keyboard)
+        text = 'Для кого считаем?'
+        context.bot.send_message(
+            chat_id=chat_id,
+            text=text,
+            reply_markup=reply_markup)
+    else:
+        text = 'Не вижу куда, сделай reply'
+        context.bot.send_message(chat_id=chat_id, text=text)
 
 
 def main():
@@ -1086,6 +1264,8 @@ def main():
     dp.add_handler(CommandHandler("guild", guild))
     dp.add_handler(CommandHandler("a_guilds", a_guilds))
     dp.add_handler(CommandHandler("a_spots", a_spots))
+    dp.add_handler(CommandHandler("worldtop", worldtop))
+    dp.add_handler(CommandHandler("calc", calculate_atak))
 
     dp.add_handler(InlineQueryHandler(inlinequery))
     dp.add_handler(ChosenInlineResultHandler(on_result_chosen))
@@ -1148,10 +1328,10 @@ def start_time_triggers():
 
 def init_db():
     db.connect()
-    from models import Report, Token, Request, UserData, GoldRules, WtbLogs, Alliances
+    from models import Report, Token, Request, UserData, GoldRules, WtbLogs, Alliances, WorldTop
     db.create_tables(
         [Trigger, TimeTrigger, Spot, Report, Token, Request,
-         UserData, GoldRules, WtbLogs, Alliances], safe=True)
+         UserData, GoldRules, WtbLogs, Alliances, WorldTop], safe=True)
     db.close()
 
 
