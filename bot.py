@@ -1167,6 +1167,8 @@ def send_world_top(context, chat_id, date, extra=None):
         wt_points_old = [x.points for x in wt_old]
     text = ''
     counter = 0
+    all_atk = 0
+    all_def = 0
     for castle in wt:
         counter += 1
         move = '(▪️0)'
@@ -1181,12 +1183,23 @@ def send_world_top(context, chat_id, date, extra=None):
         len_points = len(str(wt[0].points))
 
         if castle.digits:
+            if '⚔' in castle.action:
+                all_atk += castle.digits
+            elif '🛡' in castle.action:
+                all_def += castle.digits
+
+            if int(castle.digits) > 1000:
+                digits = str(round((castle.digits / 1000), 1)) + 'K'
+            else:
+                digits = str(castle.digits)
             text += '\n#{}{:<4} {} `{}`🏆(+{})`{}`{}'.format(
                 counter, move, castle.emodji, str(castle.points).rjust(len_points),
-                diff, castle.action, int(castle.digits))
+                diff, castle.action, digits)
         else:
             text += '\n#{}{:<4} {} `{}`🏆(+{})`{}`'.format(
-                counter, move, castle.emodji, str(castle.points).rjust(len_points), diff, castle.action,)
+                counter, move, castle.emodji, str(castle.points).rjust(len_points), diff, castle.action)
+    if any([all_atk, all_def]):
+        text += '\n____________\n ⚔{}k\n🛡{}k'.format(round(all_atk / 1000, 1), round(all_def / 1000, 1))
     context.bot.send_message(chat_id=chat_id, text=text, parse_mode='Markdown')
 
 
