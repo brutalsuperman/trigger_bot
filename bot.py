@@ -1157,14 +1157,24 @@ def worldtop(update, context):
 
 def send_world_top(context, chat_id, date, extra=None):
     retro = None
+    delta = 8
     if extra:
-        try:
-            retro = abs(int(extra))
-            date = date - timedelta(hours=8 * retro)
-        except ValueError:
-            pass
+        if len(extra.split(' ')) == 2:
+            extra = extra.split(' ')
+            try:
+                extra = [abs(int(x)) for x in extra]
+                delta = extra[0] * 8
+                date = date - timedelta(hours=8 * extra[1])
+            except ValueError:
+                pass
+        else:
+            try:
+                retro = abs(int(extra))
+                date = date - timedelta(hours=8 * retro)
+            except ValueError:
+                pass
     date = date_to_cw_battle(date)
-    prev_date = date - timedelta(hours=8)
+    prev_date = date - timedelta(hours=delta)
     wt = get_all_world_top(date=date)
     wt_ordering = [x.name for x in wt]
     wt_points = [x.points for x in wt]
@@ -1189,7 +1199,10 @@ def send_world_top(context, chat_id, date, extra=None):
             diff = int(wt_points[wt_ordering.index(castle.name)] - wt_points_old[wt_ordering_old.index(castle.name)])
         len_points = len(str(wt[0].points))
 
-        if castle.digits:
+        if week_diff:
+            text += '\n#{} {} `{}`🏆(+{})'.format(
+                counter, castle.emodji, str(castle.points).rjust(len_points), diff)
+        elif castle.digits:
             if '⚔' in castle.action:
                 all_atk += castle.digits
             elif '🛡' in castle.action:
