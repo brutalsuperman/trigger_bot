@@ -291,3 +291,11 @@ def date_to_cw_battle(date):
         elif date.hour < 6:
             date = date.replace(day=date.day - 1, hour=22, minute=0, second=0)
     return date
+
+
+def delete_spot(alliance, name, type='spot'):
+    spot = Alliances.get_or_none(alliance=alliance, name=name, type=type)
+    if spot:
+        spot.delete_instance()
+        return True
+    return False
