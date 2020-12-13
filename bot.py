@@ -1156,8 +1156,8 @@ def worldtop(update, context):
 
 
 def send_world_top(context, chat_id, date, extra=None):
-    retro = None
     delta = 8
+    week_diff = False
     if extra:
         if len(extra.split(' ')) == 2:
             extra = extra.split(' ')
@@ -1165,6 +1165,7 @@ def send_world_top(context, chat_id, date, extra=None):
                 extra = [abs(int(x)) for x in extra]
                 delta = extra[0] * 8
                 date = date - timedelta(hours=8 * extra[1])
+                week_diff = True
             except ValueError:
                 pass
         else:
@@ -1192,10 +1193,10 @@ def send_world_top(context, chat_id, date, extra=None):
     if wt_old:
         wt_ordering_old = [x.name for x in wt_old]
         wt_points_old = [x.points for x in wt_old]
-    text = ''
     counter = 0
     all_atk = 0
     all_def = 0
+    cloud_tags = ''
     for castle in wt:
         counter += 1
         move = '(▪️0)'
@@ -1210,7 +1211,7 @@ def send_world_top(context, chat_id, date, extra=None):
         len_points = len(str(wt[0].points))
 
         if week_diff:
-            text += '\n#{} {} `{}`🏆(+{})'.format(
+            text += '\n#{} {} <code>{}</code>🏆(+{})'.format(
                 counter, castle.emodji, str(castle.points).rjust(len_points), diff)
         elif castle.digits:
             if '⚔' in castle.action:
@@ -1222,15 +1223,34 @@ def send_world_top(context, chat_id, date, extra=None):
                 digits = str(round((castle.digits / 1000), 1)) + 'K'
             else:
                 digits = str(castle.digits)
-            text += '\n#{}{:<4} {} `{}`🏆(+{})`{}`{}'.format(
+            text += '\n#{}{:<4} {} <code>{}</code>🏆(+{})<code>{}</code>{}'.format(
                 counter, move, castle.emodji, str(castle.points).rjust(len_points),
                 diff, castle.action, digits)
+            cloud_tags += get_tags(castle)
         else:
-            text += '\n#{}{:<4} {} `{}`🏆(+{})`{}`'.format(
+            text += '\n#{}{:<4} {} <code>{}</code>🏆(+{})<code>{}</code>'.format(
                 counter, move, castle.emodji, str(castle.points).rjust(len_points), diff, castle.action)
+            cloud_tags += get_tags(castle)
     if any([all_atk, all_def]):
         text += '\n____________\n ⚔{}k\n🛡{}k'.format(round(all_atk / 1000, 1), round(all_def / 1000, 1))
-    context.bot.send_message(chat_id=chat_id, text=text, parse_mode='Markdown')
+    text += '\n{}'.format(cloud_tags)
+    context.bot.send_message(chat_id=chat_id, text=text, parse_mode='HTML')
+
+
+def get_tags(castle):
+    tags = ''
+    if '⚔' in castle.action:
+        tags += '#{}_пробили '.format(castle.name.strip().replace(' ', '_').lower())
+        if '⚡️' in castle.action:
+            tags += '#{}_молния '.format(castle.name.strip().replace(' ', '_').lower())
+    elif '👌🛡' in castle.action:
+        return tags
+    elif '🛡' in castle.action:
+        tags += '#{}_дефнули '.format(castle.name.strip().replace(' ', '_').lower())
+        if '🔱' in castle.action:
+            tags += '#{}_га '.format(castle.name.strip().replace(' ', '_').lower())
+
+    return tags
 
 
 def calculate_atak(update, context):
