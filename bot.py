@@ -1175,6 +1175,16 @@ def send_world_top(context, chat_id, date, extra=None):
                 pass
     date = date_to_cw_battle(date)
     prev_date = date - timedelta(hours=delta)
+    if delta == 8:
+        p_date = date.replace(tzinfo=pytz.utc)
+        p_date = p_date.astimezone(pytz.timezone(TIMEZONE))
+        text = '{}'.format(p_date.strftime('%d.%m %H:%M'))
+    else:
+        p_date = date.replace(tzinfo=pytz.utc)
+        p_date = p_date.astimezone(pytz.timezone(TIMEZONE))
+        prev_p_date = date.replace(tzinfo=pytz.utc)
+        prev_p_date = prev_p_date.astimezone(pytz.timezone(TIMEZONE))
+        text = '{}-{}'.format(prev_p_date.strftime('%d.%m %H:%M'), p_date.strftime('%d.%m %H:%M'))
     wt = get_all_world_top(date=date)
     wt_ordering = [x.name for x in wt]
     wt_points = [x.points for x in wt]
