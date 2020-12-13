@@ -397,16 +397,19 @@ def send_button(context, chat_id):
 def inline_button(update, context):
     castles = ['🦇', '☘️', '🍁', '🍆', '🌹', '🖤', '🐢']
     if update.callback_query.data in castles:
+        emodji = update.callback_query.data
+        if emodji == '☘️':
+            emodji = '☘'
         user_id = update._effective_user.id
         u_data = user_data[user_id]['calc']
-        rep = get_castle_gold(emodji=update.callback_query.data, date=u_data.get('date', None))
+        rep = get_castle_gold(emodji=emodji, date=u_data.get('date', None))
         if rep:
             if '🛡' in rep.action:
                 action = '🛡'
-                digits = int(int(u_data.get('def', 0)) / int(u_data.get('gold', 0))) * int(rep.gold)
+                digits = int(int(u_data.get('def', 0)) / int(u_data.get('gold', 0)) * int(rep.gold))
             elif '⚔' in rep.action:
                 action = '⚔'
-                digits = int(int(u_data.get('atk', 0)) / int(u_data.get('gold', 0))) * int(rep.gold)
+                digits = int(int(u_data.get('atk', 0)) / int(u_data.get('gold', 0)) * int(rep.gold))
 
             if digits:
                 rep.digits = digits
