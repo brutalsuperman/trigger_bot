@@ -1126,6 +1126,10 @@ def a_spots(update, context):
         if hours < 8:
             activate = '🕡'
 
+        if days > 7:
+            delete_spot(spot.alliance, spot.name)
+            continue
+
         if 'Mine' in spot.name:
             spot_type = '📦'
         elif 'Fort' in spot.name or 'Outpost' in spot.name or 'Tower' in spot.name:
