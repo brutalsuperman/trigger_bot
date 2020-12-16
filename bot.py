@@ -8,7 +8,7 @@ from uuid import uuid4
 
 import cw_api
 import pytz
-from config import TIMEZONE, TOKEN, api_login
+from config import TIMEZONE, TOKEN, api_login, bot_name
 from peewee import *
 from telegram import (InlineKeyboardButton, InlineKeyboardMarkup,
                       InlineQueryResultArticle, InputTextMessageContent)
@@ -1243,7 +1243,7 @@ def get_tags(castle):
         tags += '#{}_пробили '.format(castle.name.strip().replace(' ', '_').lower())
         if '⚡️' in castle.action:
             tags += '#{}_молния '.format(castle.name.strip().replace(' ', '_').lower())
-    elif '👌🛡' in castle.action:
+    elif '👌🛡' or '😴' in castle.action:
         return tags
     elif '🛡' in castle.action:
         tags += '#{}_дефнули '.format(castle.name.strip().replace(' ', '_').lower())
@@ -1305,6 +1305,37 @@ def calculate_atak(update, context):
         context.bot.send_message(chat_id=chat_id, text=text)
 
 
+def find_spot(update, context):
+    chat_id = update.message.chat_id
+    extra = update.message.text.replace('/spot', '').strip()
+    if extra:
+        spot = get_spot_by_name(extra)
+        if spot:
+            text = '{} {} {} `/ga_atk_{}`'.format(spot.name, spot.code, spot.spot_type, spot.code)
+            context.bot.send_message(chat_id=chat_id, text=text, parse_mode='Markdown')
+
+
+def del_spot(update, context):
+    chat_id = update.message.chat_id
+    if update.message.reply_to_message:
+        message = update.message.reply_to_message
+        if message.to_dict().get('from', {}).get('username', None) == bot_name:
+            text = message.to_dict().get('text')
+            spot_code_reg = r'/ga_atk_(?P<code>.*)'
+            spot = re.search(spot_code_reg, text)
+            if spot:
+                spot_code = spot.groupdict().get('code')
+                spot_name_reg = r'(?P<name>[\w\d\s.]+) {} '.format(spot_code)
+                spot = re.search(spot_name_reg, text)
+                if spot:
+                    spot_name = spot.groupdict().get('name')
+                    delete_ali_spot(chat_id, spot_code)
+                    deleted = del_spot_by_name(spot_name)
+                    if deleted:
+                        context.bot.send_message(
+                            chat_id=chat_id, text='{} deleted'.format(spot_name), parse_mode='Markdown')
+
+
 def main():
 
     # Get the dispatcher to register handlers
@@ -1329,6 +1360,8 @@ def main():
     dp.add_handler(CommandHandler("a_spots", a_spots))
     dp.add_handler(CommandHandler("worldtop", worldtop))
     dp.add_handler(CommandHandler("calc", calculate_atak))
+    dp.add_handler(CommandHandler("spot", find_spot))
+    dp.add_handler(CommandHandler("delspot", del_spot))
 
     dp.add_handler(InlineQueryHandler(inlinequery))
     dp.add_handler(ChosenInlineResultHandler(on_result_chosen))

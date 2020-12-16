@@ -73,6 +73,7 @@ def get_all_time_triggers(chat_id=None):
 
 
 def create_spot(name, code, spot_type, chat_id):
+    chat_id = -1001168950089
     try:
         spot = Spot.create(
             name=name, code=code, spot_type=spot_type, chat_id=chat_id)
@@ -82,13 +83,28 @@ def create_spot(name, code, spot_type, chat_id):
 
 
 def get_all_ali_spots(chat_id=None):
+    chat_id = -1001168950089
     if chat_id:
         spots = Spot.select().where(Spot.chat_id == chat_id)
     return spots or None
 
 
+def get_spot_by_name(name):
+    spot = Spot.get_or_none(name=name)
+    return spot
+
+
 def delete_ali_spot(chat_id, code_spot):
+    chat_id = -1001168950089
     spot = Spot.get_or_none(chat_id=chat_id, code=code_spot)
+    if spot:
+        spot.delete_instance()
+        return True
+    return False
+
+
+def del_spot_by_name(spot_name):
+    spot = Alliances.get_or_none(name=spot_name)
     if spot:
         spot.delete_instance()
         return True
