@@ -165,7 +165,7 @@ def trigger_me(update, context):
 
         elif '🗺State of map:' in update._effective_message.text:
             text = update._effective_message.text
-            alli_reg = r'(?:\n|$)(?P<spot_name>[\w\d\s.]+)belongs to (?P<alliance_name>.*)\.'
+            alli_reg = r'(?:\n|$)(?P<spot_name>[\w\d\s.]+)belongs to (?P<alliance_name>[\w\s]+).'
             alli_spot = re.findall(alli_reg, text)
             if alli_spot:
                 for spot in alli_spot:
@@ -1336,6 +1336,72 @@ def del_spot(update, context):
                             chat_id=chat_id, text='{} deleted'.format(spot_name), parse_mode='Markdown')
 
 
+@admin_decorator
+def whois(update, context):
+    chat_id = update.message.chat_id
+    text = ''
+    users = get_user_data(type='requestProfile')
+    for user in users:
+        user_data = json.loads(user.data)
+        if user_data.get('guild_tag'):
+            text += '\n[{}]{} {} {}'.format(
+                user_data.get('guild_tag'), user_data.get('userName'), user_data.get('class'), user_data.get('lvl'))
+        else:
+            text += '\n{} {} {}'.format(user_data.get('userName'), user_data.get('class'), user_data.get('lvl'))
+    context.bot.send_message(chat_id, text)
+
+
+def myduels(update, context):
+    chat_id = update.message.chat_id
+    user_id = update.message.from_user.id
+    extra = update.message.text.replace('/du', '').strip()
+    date = update.message.date.astimezone(pytz.timezone(TIMEZONE))
+    if date.hour >= 13:
+        date = date.replace(hour=13, minute=0, second=0)
+    if date.hour < 13:
+        date = date - timedelta(days=1)
+    duels, username = get_duels(user_id, date, extra)
+    if duels is False:
+        text = 'Duels of {} not found'.format(username)
+    if username is None:
+        text = 'Мы пока не знакомы, пройди авторизацию'
+    else:
+        win_count = 0
+        win_text = ''
+        lose_count = 0
+        lose_text = ''
+        lvl = 0
+        for duel in duels:
+            if username == duel.winner_name:
+                win_count += 1
+                lvl = duel.winner_level
+                if duel.loser_guild:
+                    guild = r'\[{}]'.format(duel.loser_guild)
+                else:
+                    guild = ''
+                win_text += '{} {} {} {}\n'.format(duel.loser_level, duel.loser_castle, guild, duel.loser_name)
+            elif username == duel.loser_name:
+                lose_count += 1
+                lvl = duel.loser_level
+                if duel.winner_guild:
+                    guild = r'\[{}]'.format(duel.winner_guild)
+                else:
+                    guild = ''
+                lose_text +='{} {} {} {}\n'.format(duel.winner_level, duel.winner_castle, guild, duel.winner_name)
+
+        text = '{} {}\n'.format(lvl, username)
+        text += 'duels on {}/{}\n\n'.format(date.day, date.month)
+        text += '❤️ Won {}\n'.format(win_count)
+        text += win_text
+        text += '\n'
+
+        text += '💔 Lost {}\n'.format(lose_count)
+        text += lose_text
+        text += '\n'
+        text += 'Total {}/{}'.format(win_count, lose_count)
+    context.bot.send_message(chat_id, text, parse_mode='Markdown')
+
+
 def main():
 
     # Get the dispatcher to register handlers
@@ -1362,6 +1428,9 @@ def main():
     dp.add_handler(CommandHandler("calc", calculate_atak))
     dp.add_handler(CommandHandler("spot", find_spot))
     dp.add_handler(CommandHandler("delspot", del_spot))
+    dp.add_handler(CommandHandler("whois", whois))
+    dp.add_handler(CommandHandler("du", myduels))
+
 
     dp.add_handler(InlineQueryHandler(inlinequery))
     dp.add_handler(ChosenInlineResultHandler(on_result_chosen))
@@ -1424,10 +1493,10 @@ def start_time_triggers():
 
 def init_db():
     db.connect()
-    from models import Report, Token, Request, UserData, GoldRules, WtbLogs, Alliances, WorldTop
+    from models import Report, Token, Request, UserData, GoldRules, WtbLogs, Alliances, WorldTop, Duels
     db.create_tables(
         [Trigger, TimeTrigger, Spot, Report, Token, Request,
-         UserData, GoldRules, WtbLogs, Alliances, WorldTop], safe=True)
+         UserData, GoldRules, WtbLogs, Alliances, WorldTop, Duels], safe=True)
     db.close()
 
 

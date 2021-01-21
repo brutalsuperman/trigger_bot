@@ -1,6 +1,7 @@
 TOKEN = 'your_token_here'
 
 TIMEZONE = 'Europe/Moscow'
+LOCAL_TIMEZONE = 'Europe/Kiev'
 
 api_auth = 'login:password'
 exchange_key = 'login_ex'

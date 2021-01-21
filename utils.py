@@ -1,5 +1,7 @@
-from models import (Spot, GoldRules, Report, Request, TimeTrigger, Token,
-                    Trigger, UserData, WtbLogs, Alliances, WorldTop)
+import json
+
+from models import (Alliances, Duels, GoldRules, Report, Request, Spot,
+                    TimeTrigger, Token, Trigger, UserData, WorldTop, WtbLogs)
 from peewee import IntegrityError
 
 
@@ -315,3 +317,24 @@ def delete_spot(alliance, name, type='spot'):
         spot.delete_instance()
         return True
     return False
+
+
+def create_duel(date, winner_id, *args, **kwargs):
+    duel = Duels.insert(date=date, winner_id=winner_id,
+        **kwargs).on_conflict(
+        conflict_target=(Duels.date, Duels.winner_id),
+        preserve=(Duels.date, Duels.winner_id),
+        update={**kwargs}).execute()
+
+
+def get_duels(chat_id, date, username=None):
+    if not username:
+        user = UserData.get_or_none(chat_id=chat_id, type='requestProfile')
+        if user:
+            user = json.loads(user.data)
+            username = user.get('userName')
+        else:
+            return False, None
+    duels = Duels.select().where(Duels.date >= date, (
+        (Duels.winner_name == username) | (Duels.loser_name == username)))
+    return duels, username

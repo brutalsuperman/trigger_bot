@@ -119,3 +119,22 @@ class WorldTop(Model):
     class Meta:
         database = db
         primary_key = CompositeKey('emodji', 'name', 'date')
+
+
+class Duels(Model):
+    date = DateTimeField()
+    winner_castle = CharField(null=False)
+    winner_guild = CharField(null=True)
+    winner_name = CharField()
+    winner_level = IntegerField()
+    winner_id = CharField()
+    loser_castle = CharField(null=False)
+    loser_guild = CharField(null=True)
+    loser_name = CharField()
+    loser_level = IntegerField()
+    loser_id = CharField()
+
+    class Meta:
+        database = db
+        primary_key = CompositeKey('date', 'winner_id')
+
