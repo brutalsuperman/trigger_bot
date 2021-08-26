@@ -1,32 +1,22 @@
+import json
+from datetime import datetime, timedelta
 
 import pika
-import json
-import utils
+from core.config import api_auth, consumer_key
+from core.utils import send_message
 from peewee import *
-from config import api_auth, consumer_key, TOKEN
-from datetime import datetime, timedelta
+from users import utils
 
 url = 'amqps://{}@api.chtwrs.com:5673'.format(api_auth)
 params = pika.URLParameters(url)
 params.socket_timeout = 5
 
-
 connection = pika.BlockingConnection(params)
 channel = connection.channel()
 
 
-db = SqliteDatabase('sqlite.db')
+db = PostgresqlDatabase('ogwbot', user='ogw', password='kalavera')
 db.connect()
-
-
-def send_message(chat_id, text):
-    import requests
-    url = 'https://api.telegram.org/bot{}/sendMessage'.format(TOKEN)
-    data = {
-        'chat_id': chat_id,
-        'text': text
-    }
-    resp = requests.post(url, data)
 
 
 def callback(ch, method, properties, body):
@@ -46,7 +36,8 @@ def callback(ch, method, properties, body):
         user_id = payload.get('userId')
         if action == 'grantToken':
             token = payload.get('token')
-            utils.create_token(user_id, token)
+            cw_id = payload.get('id')
+            utils.create_token(user_id, token, cw_id)
             text = 'Авторизация прошла успешно.'
             send_message(user_id, text)
         elif action == 'authAdditionalOperation':
@@ -77,7 +68,20 @@ def callback(ch, method, properties, body):
 
             utils.create_user_data(user_id, type='requestStock', data=json.dumps(new_dict))
             text = 'Сток обновил, можно сдавать. Открой @ChatWarsBot бота и напиши @OGWHelperbot после чего выбирай из списка.'
-            send_message(user_id, text)
+
+            keyboard = json.dumps({
+                "inline_keyboard": [[
+                    {
+                        "text": "Deposit",
+                        "switch_inline_query": " "}]]})
+
+            data = {
+                "chat_id": user_id,
+                "parse_mode": "HTML",
+                "text": text,
+                "reply_markup": keyboard}
+
+            send_message(user_id, text, data=data)
         elif action == 'guildInfo':
             old = utils.get_user_data(user_id, type='guildInfo')
             old_glory = 0
@@ -90,6 +94,17 @@ def callback(ch, method, properties, body):
                 text = '+{} гп'.format(new_glory - old_glory)
                 send_message(user_id, text)
             utils.create_user_data(user_id, type='guildInfo', data=json.dumps(payload))
+        elif action == 'requestGearInfo':
+            gear = payload.get('gearInfo', {})
+            utils.create_user_data(user_id, type='requestGearInfo', data=json.dumps(gear))
+            broken = []
+            for value in gear.values():
+                if value.get('condition') == 'broken':
+                    broken.append(value.get('name'))
+
+            if len(broken):
+                text = 'Похоже у тебя сломаны вещи \n' + '/n'.join(broken) + '\n\nГо чинить'
+                send_message(user_id, text)
 
     if action == 'wantToBuy':
         user_id = payload.get('userId')

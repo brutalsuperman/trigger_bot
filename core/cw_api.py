@@ -1,7 +1,8 @@
-import pika
 import json
-from config import exchange_key, routing_key, api_auth
 from functools import wraps
+
+import pika
+from core.config import api_auth, exchange_key, routing_key
 
 
 def connection_decorator(func):
@@ -24,7 +25,7 @@ def connection_decorator(func):
 
 additional_operations = [
     'GetUserProfile', 'GetBasicInfo', 'GetGearInfo',
-    'GetStock', 'GuildInfo', 'TradeTerminal', 'GuildInfo']
+    'GetStock', 'GuildInfo', 'TradeTerminal']
 
 request_actions = [
     'requestProfile', 'requestBasicInfo', 'requestGearInfo',
