@@ -390,7 +390,7 @@ def trigger_me(update, context):
 
     # обижен сусликом
     if update.message.forward_from and update.message.forward_from.id == 265204902:
-        if 'Обижен' in update.message.text:
+        if 'Обижен' in update.message.text or 'Измазан в грязи' in update.message.text:
             castle = None
             mobj = re.search('Обижен 🐾\w+ воина (?P<castle>.)\w+', update.message.text)
             if mobj:
@@ -413,10 +413,11 @@ def trigger_me(update, context):
     if update.message.forward_from and update.message.forward_from.id == 265204902:
         if 'Твои результаты в бою:' in update.message.text and 'Встреча' not in update.message.text:
             date = date_to_cw_battle(update.message.forward_date)
-            reg_nick = r'🦇.\[\w+\]([\w\s_-]+)⚔|🦇([\w\s_-]+)⚔|🦇\[\w+\]([\w\s_-]+)⚔'
+            import ipdb;ipdb.set_trace()
+            reg_nick = r'(🦇|🌹|🐢|🖤|🍆|🍁|☘️).\[\w+\]([\w\s_-]+)⚔|(🦇|🌹|🐢|🖤|🍆|🍁|☘️)([\w\s_-]+)⚔|(🦇|🌹|🐢|🖤|🍆|🍁|☘️)\[\w+\]([\w\s_-]+)⚔'
             nickname = re.match(reg_nick, update.message.text)
             if any(nickname.groups()):
-                nickname = [x.strip() for x in nickname.groups() if x is not None][0]
+                nickname = [x.strip() for x in nickname.groups() if x is not None][1]
             new_report = create_report(chat_id, nickname, update.message.text, date)
             if not new_report:
                 context.bot.send_message(chat_id=chat_id, text=old_report_text, parse_mode='html')
@@ -740,6 +741,7 @@ def main():
     dp.add_handler(CommandHandler("a_spots", a_spots))
     dp.add_handler(CommandHandler("worldtop", worldtop))
     dp.add_handler(CommandHandler("wtop", wtop))
+    dp.add_handler(CommandHandler("qtop", qtop))
     dp.add_handler(CommandHandler("calc", calculate_atak))
     dp.add_handler(CommandHandler("spot", find_spot))
     dp.add_handler(CommandHandler("delspot", del_spot))
@@ -826,7 +828,7 @@ def start_time_triggers():
 
 
 def init_db():
-    db.connect()
+    db.connect(reuse_if_open=True)
     from alliances.models import Alliances, Spot
     from triggers.models import Trigger, TimeTrigger
     from users.models import UserData, GoldRules, WtbLogs, Duels, Users, Guilds, Request, Token, Report, UserSettings

@@ -574,12 +574,8 @@ def reports(update, context):
     else:
         date = date_to_cw_battle(date)
         prev_date = date - timedelta(hours=8)
-        if update.message.from_user.id in [252167939, 122440518, 217906579, 467638790, 837889450]:
-            reports = find_report(-1001168950089, date, nickname, admin=True)
-            prev_reports = find_report(-1001168950089, prev_date)
-        else:
-            reports = find_report(chat_id, date)
-            prev_reports = find_report(chat_id, prev_date)
+        reports = find_report(chat_id, date)
+        prev_reports = find_report(chat_id, prev_date)
         if guild:
             prev_reports = [x for x in prev_reports if guild in x.text]
         prev_nicks = [x.nickname for x in prev_reports]
@@ -633,9 +629,11 @@ def users(update, context):
     else:
         users = get_users(extra)
         text = ''
+        max_len_name = len(max([user.name for user in users], key=len))
+        max_len_where = len(max([user.where for user in users], key=len))
         for user in users:
-            text += '{:>2} {:<17}{:>6} {:>16}\n'.format(
-                str(user.level), user.name, user.where,
+            text += '{} <code>{}</code> <code>{}</code> {}\n'.format(
+                str(user.level), user.name.ljust(max_len_name, ' '), user.where.ljust(max_len_where, ' '),
                 str(user.last_seen.strftime('%d.%m.%Y %H:%M')))
 
         context.bot.send_message(chat_id, text, parse_mode='HTML')
@@ -665,8 +663,8 @@ def guilds(update, context):
         guilds = get_guilds(extra)
         text = ''
         for guild in guilds:
-            text += '{}{} {} last seen {}\n'.format(
-                guild.castle, '[' + guild.name + ']', guild.where.rjust(7),
+            text += '{}<code>{}</code> <code>{}</code> last seen {}\n'.format(
+                guild.castle, ('[' + guild.name + ']').ljust(5, ' '), guild.where.ljust(6, ' '),
                 str(guild.last_seen).rjust(20))
 
         context.bot.send_message(chat_id, text, parse_mode='HTML')

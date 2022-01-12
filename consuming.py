@@ -16,7 +16,7 @@ channel = connection.channel()
 
 
 db = PostgresqlDatabase('ogwbot', user='ogw', password='kalavera')
-db.connect()
+db.connect(reuse_if_open=True)
 
 
 def callback(ch, method, properties, body):

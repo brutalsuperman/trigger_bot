@@ -6,7 +6,7 @@ from peewee import IntegrityError
 
 def update_world_top(emodji, name, points, date, action=None, gold=None):
 
-    data = {"points": points, "emodji": emodji, "name": name, "date": date}
+    data = {"points": points, "emodji": emodji, "name": name, "date": date, "start_points": points}
     update = {"points": points}
     if action:
         data['action'] = action
@@ -15,6 +15,8 @@ def update_world_top(emodji, name, points, date, action=None, gold=None):
         data['gold'] = gold
         update['gold'] = gold
 
+    print(data)
+
     wt = WorldTop.insert(
         **data).on_conflict(
         conflict_target=(WorldTop.date, WorldTop.name, WorldTop.emodji),
@@ -22,8 +24,11 @@ def update_world_top(emodji, name, points, date, action=None, gold=None):
         update={**update}).execute()
 
 
-def get_all_world_top(date):
-    wt = WorldTop.select().where(WorldTop.date == date).order_by(WorldTop.points.desc())
+def get_all_world_top(date, min_date=False):
+    if not min_date:
+        wt = WorldTop.select().where(WorldTop.date == date).order_by(WorldTop.points.desc())
+    else:
+        wt = WorldTop.select().where(WorldTop.date <= date, WorldTop.date >= min_date).order_by(WorldTop.points.desc())
     return wt
 
 

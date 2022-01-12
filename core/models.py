@@ -10,6 +10,7 @@ class WorldTop(Model):
     gold = IntegerField(null=True)
     action = CharField(null=True)
     digits = IntegerField(null=True)
+    start_points = IntegerField()
 
     class Meta:
         database = db
