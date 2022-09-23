@@ -7,7 +7,7 @@ from threading import Thread
 
 import pytz
 from core import cw_api
-from core.config import TIMEZONE
+from core.config import TIMEZONE, castle_emoji
 from core.texts import *
 from core.utils import date_to_cw_battle
 from public.utils import *
@@ -643,7 +643,7 @@ def update_guilds(update):
     text = update._effective_message.text
     last_seen = update.channel_post.forward_date
 
-    guild_user_reg = r'(?P<castle>(☘️|🍆|🌹|🐢|🖤|🍁|🦇)).{0,2}\[(?P<tag>.{2,3})\](?P<nick>[\w\s\d_]+)(,|\n)'
+    guild_user_reg = r'(?P<castle>(' + '|'.join(castle_emoji) + ')).{0,2}\[(?P<tag>.{2,3})\](?P<nick>[\w\s\d_]+)(,|\n)'
     users = re.findall(guild_user_reg, text)
     if users:
         for user in users:

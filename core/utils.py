@@ -26,35 +26,35 @@ def update_world_top(emodji, name, points, date, action=None, gold=None):
 
 def get_all_world_top(date, min_date=False):
     if not min_date:
-        wt = WorldTop.select().where(WorldTop.date == date).order_by(WorldTop.points.desc())
+        wt = WorldTop.select().where(WorldTop.date == date.replace(tzinfo=None)).order_by(WorldTop.points.desc())
     else:
-        wt = WorldTop.select().where(WorldTop.date <= date, WorldTop.date >= min_date).order_by(WorldTop.points.desc())
+        wt = WorldTop.select().where(WorldTop.date <= date.replace(tzinfo=None), WorldTop.date >= min_date.replace(tzinfo=None)).order_by(WorldTop.points.desc())
     return wt
 
 
 def add_world_top(emodji, name, points, old_date, date, action=None, gold=None):
-    wt = WorldTop.get_or_none(WorldTop.emodji == emodji, WorldTop.name == name, WorldTop.date == old_date)
+    wt = WorldTop.get_or_none(WorldTop.emodji == emodji, WorldTop.name == name, WorldTop.date == old_date.replace(tzinfo=None))
     if wt:
         update_world_top(wt.emodji, wt.name, wt.points + int(points), date, action, gold)
     return wt
 
 
 def get_castle_gold(emodji, date):
-    castle = WorldTop.get_or_none(WorldTop.emodji == emodji, WorldTop.date == date)
+    castle = WorldTop.get_or_none(WorldTop.emodji == emodji, WorldTop.date == date.replace(tzinfo=None))
     return castle or None
 
 
 def date_to_cw_battle(date):
-    if date.hour >= 6 and date.hour < 14:
-        date = date.replace(hour=6, minute=0, second=0)
-    elif date.hour >= 14 and date.hour < 22:
-        date = date.replace(hour=14, minute=0, second=0)
+    if date.hour >= 7 and date.hour < 15:
+        date = date.replace(hour=7, minute=0, second=0)
+    elif date.hour >= 15 and date.hour < 23:
+        date = date.replace(hour=15, minute=0, second=0)
     else:
-        if date.hour >= 22:
-            date = date.replace(hour=22, minute=0, second=0)
-        elif date.hour < 6:
+        if date.hour >= 23:
+            date = date.replace(hour=23, minute=0, second=0)
+        elif date.hour < 7:
             from datetime import timedelta
-            date = date.replace(hour=22, minute=0, second=0) - timedelta(days=1)
+            date = date.replace(hour=23, minute=0, second=0) - timedelta(days=1)
     return date
 
 

@@ -8,7 +8,7 @@ from uuid import uuid4
 
 from alliances.main import *
 from core.base import db
-from core.config import TOKEN, api_login
+from core.config import TOKEN, api_login, svodki_channel, main_svodki_channel, order_of_grey_wolf, mid_id, cwbot_id, castle_emoji, castle_full
 from core.main import *
 from core.texts import *
 from keyboards import menu_markup
@@ -21,6 +21,7 @@ from telegram.ext import (CallbackQueryHandler, ChosenInlineResultHandler,
                           MessageHandler, Updater)
 from triggers.main import *
 from users.main import *
+from wordle.main import *
 
 # Enable logging
 logging.basicConfig(
@@ -49,16 +50,12 @@ def start(update, context):
     if update.message.chat.type == 'private':
 
         """Send a message when the command /start is issued."""
-        update.message.reply_text(text="Бот отряда OGW", reply_markup=menu_markup())
+        update.message.reply_text(text=hello_text, reply_markup=menu_markup())
 
 
 def trigger_me(update, context):
-    svodki_channel = -1001486183416#-1001401627995  # -1001486183416
-    main_svodki_channel = -1001369273162
-    order_of_grey_wolf = -1001168950089  # -394357133
-    mid_id = -394357133 #-1001485556499  # -394357133
     if update.message:
-        if update.message.forward_from and update.message.forward_from.id == 265204902:
+        if update.message.forward_from and update.message.forward_from.id == cwbot_id:
             if re.search(r'Code \d+ to authorize {}'.format(api_login), update.message.text):
                 user_id = update.message.from_user.id
                 code = re.search(r'Code (\d+) to authorize {}'.format(api_login), update.message.text).groups()[0]
@@ -69,12 +66,10 @@ def trigger_me(update, context):
             stock(update, context)
         elif update.message.text.startswith("🔔"):
             user_settings(update, context)
-
     if update.channel_post and update.channel_post.chat.id == svodki_channel:
 
         update_guilds(update)
         link = ''
-
         report = update._effective_message.text
         if '🤝Headquarters news:' in update._effective_message.text:
             text = update._effective_message.text
@@ -83,7 +78,7 @@ def trigger_me(update, context):
             if alli_def:
                 for alli in alli_def:
                     alliance = alli[0].strip()
-                    guilds = re.findall(r'(?P<castle>☘️|🍆|🌹|🐢|🖤|🍁|🦇)(?P<guild>.?\[\w+\])', alli[-1])
+                    guilds = re.findall(r'(?P<castle>' + '|'.join(castle_emoji) + ')(?P<guild>.?\[\w+\])', alli[-1])
                     if guilds:
                         guilds = [x[0] + x[1] for x in guilds]
                         for guild in guilds:
@@ -99,20 +94,21 @@ def trigger_me(update, context):
                     last_seen = update.channel_post.forward_date
                     create_alliances_spot(spot[1].strip(), spot[0].strip(), last_seen, type='spots')
 
-        elif 'Результаты сражений:' in update._effective_message.text and 'По итогам сражений замкам начислено:' in update._effective_message.text:
+        elif ('Результаты сражений:' in update._effective_message.text or 'Battle reports:' in update._effective_message.text) and (
+                'По итогам сражений замкам начислено:' in update._effective_message.text or 'Scores' in update._effective_message.text):
             text = update._effective_message.text
 
             if update.channel_post.forward_from_chat.id == main_svodki_channel:
                 mes_id = update.channel_post.forward_from_message_id
 
-                link = f'<a href="https://t.me/ChatWarsDigest/{mes_id}">Сводка</a>'
-
-            repl = r'По итогам сражений замкам начислено:([\d\D]+)'
+                # link = f'<a href="https://t.me/ChatWarsDigest/{mes_id}">Сводка</a>'
+                link = f'<a href="https://t.me/chtwrsReports/{mes_id}">Сводка</a>'
+            repl = r'Scores:\s([\d\D]+)'
             worldtop = re.findall(repl, text)
             if worldtop:
 
-                reg_action = r'(?P<emoj>.*)(?:В битве у ворот |Защитники )(?P<castle>.)'
-                reg_gold = r'(?:🏆Атакующие разграбили замок на |🏆У атакующих отобрали )(?P<gold>\d+) золотых монет'
+                reg_action = r'(?P<emoj>.*)(?:At )(?P<castle>.)'
+                reg_gold = r'(?:🏆Attackers have pillaged the castle for |🏆Attackers have lost )(?P<gold>\d+) gold'
 
                 gold_map = {}
                 for castle in text.split('\n\n'):
@@ -120,13 +116,15 @@ def trigger_me(update, context):
                     mobj = re.search(reg_action, castle)
                     if mobj:
                         extra_emo = ''
-                        if 'скучали, на них никто не напал.' in castle:
+                        if 'were bored - no one has attacked them' in castle:
                             extra_emo = '😴'
-                        elif 'со значительным преимуществом' in castle:
+                        elif 'wiped out by a horde' in castle:
                             extra_emo = '😎'
-                        elif 'защитники легко отбились' in castle:
+                        elif 'have easily fought off' in castle:
                             extra_emo = '👌'
-                        elif 'разыгралась настоящая бойня' in castle:
+                        elif 'was a bloody massacre' in castle:
+                            extra_emo = '⚡️'
+                        elif 'had a slight edge' in castle:
                             extra_emo = '⚡️'
                         temp_castle = mobj['castle']
                         gold_map[temp_castle] = {'emoj': extra_emo + mobj['emoj']}
@@ -137,7 +135,7 @@ def trigger_me(update, context):
                             else:
                                 gold_map[temp_castle]['gold'] = 0
 
-                reg = r'\n(.)([\D\s]+)\+(?P<points>\d+)'
+                reg = r'(.)([\D\s]+)\+(?P<points>\d+) 🏆 points'
                 mobj = re.findall(reg, worldtop[0])
                 if mobj:
                     date = date_to_cw_battle(update.channel_post.forward_date)
@@ -155,16 +153,16 @@ def trigger_me(update, context):
         top = []  # 🦇🐺[OGW]Альрия
         top_worst = []
         guilds = ['OGW', 'SIF', 'STG', 'MAG']
-        temp_worst = re.findall(r'🛡 В битве у ворот (☘️|🍆|🌹|🐢|🖤|🍁)(.*)\n🎖Лидеры атаки:(.*)\n🎖Лидеры защиты:', report)
+        temp_worst = re.findall(r'🛡 At ({})(.*)\n🎖Attack leaders:(.*)\n🎖Defense leaders:'.format('|'.join(castle_emoji)), report)
         for guild in guilds:
             best = []
             worst = []
 
             if temp_worst:
                 for castle in temp_worst:
-                    if re.findall(r'\[{}]([\w\d\s\-\_]+)[ |,|\n]'.format(guild), castle[2]):
+                    if re.findall(r'\[{}]([\w\d\-\_🎗 ]+)[ |,|\n]'.format(guild), castle[2]):
                         worst += (castle[0], re.findall(r'\[{}]([\w\d\s\-\_]+)[ |,|\n]'.format(guild), castle[2]))
-            best = re.findall(r'\[{}]([\w\d\s\-\_]+)[ |,|\n]'.format(guild), report)
+            best = re.findall(r'\[{}]([\w\d\-\_🎗 ]+)[ |,|\n]'.format(guild), report)
             if worst:
                 top_worst.append(worst)
             if best:
@@ -177,8 +175,7 @@ def trigger_me(update, context):
         if top or top_worst:
             context.chat_data['top'] += top
             context.chat_data['worst'] += top_worst
-
-        if 'По итогам сражений замкам начислено' in report:
+        if 'Scores' in report:
             text = ''
             if context.chat_data.get('top', []) or context.chat_data.get('worst', []):
                 if context.chat_data.get('top', []):
@@ -199,6 +196,8 @@ def trigger_me(update, context):
                             text += '{}, зачем тебе это чёрное сердечко, лучше вот тебе наше❤️'.format(hero[1])
                         elif hero[0] == '☘️' or hero[0] == '☘':
                             text += '{}, пока ты ищешь клевер с четырьмя лепестками, удача тихонько проходит мимо.'.format(hero[1])
+                        else:
+                            text += 'Для {} я еще не придумал текст, {} предложи свой'.format(hero[0], hero[1])
                 context.bot.send_message(chat_id=order_of_grey_wolf, text=text, parse_mode='html')
             else:
                 text = 'Увы, никто не попал в топ'
@@ -216,12 +215,12 @@ def trigger_me(update, context):
         send_trigger(context, chat_id, trigger)
 
     # mobu
-    if update.message.forward_from and update.message.forward_from.id == 265204902:
+    if update.message.forward_from and update.message.forward_from.id == cwbot_id:
         if '/fight' in update.message.text.lower():
             create_mobu(update, context)
 
     # update resorce codes
-    if update.message.forward_from and update.message.forward_from.id == 265204902:
+    if update.message.forward_from and update.message.forward_from.id == cwbot_id:
         if 'Guild Warehouse' in update.message.text:
             for row in update.message.text.split('\n'):
                 mobj = re.search(r'(\w\d+|\d+) ([\w\s]+) x', row)
@@ -229,39 +228,45 @@ def trigger_me(update, context):
                     code, name = mobj.groups()
                     update_resourse_code(name, code)
 
-    # event
-    if update.message.forward_from and update.message.forward_from.id == 265204902:
-        if 'големы могут быть хитрыми' in update.message.text:
-            mobs_reg = r'големы могут быть хитрыми!([\s\d\w\n\.]+)'
-            class_reg = r'в дверном проёме выглядят знакомо (.*),'
-            date = update.message.forward_date
-            mobs = re.search(mobs_reg, update.message.text)
-            classes = re.search(class_reg, update.message.text)
-            if mobs and classes:
-                mobs = mobs.group(1)
-                classes = classes.group(1)
-                mobs_lvl = re.findall(r'lvl.(\d+)', mobs)
-                mean_lvl = sum([int(x) for x in mobs_lvl]) / len(mobs_lvl)
-                who_ping = []
-                users = get_user_data(type='requestProfile')
-                for user in users:
-                    user_data = json.loads(user.data)
-                    if user_data.get('guild_tag', None) not in ['OGW', 'STG']:
-                        continue
-                    if user_data['class'] in classes:
-                        if abs(user_data['lvl'] - mean_lvl) <= 10:
-                            who_ping.append(user_data['userName'])
-                text = 'Средний уровень {}\nНадо классы {}'.format(int(mean_lvl), ''.join([x for x in classes]))
-                if (datetime.utcnow().replace(tzinfo=timezone.utc) - date).seconds >= 300:
-                    text += '\n\nПРОСТРОЧЕНО'
-                if who_ping:
-                    text += '\nНадо пингануть {}'.format(','.join(who_ping))
+
+    if update.message.forward_from and update.message.forward_from.id == 5265011919:
+        if 'Почти!' in update.message.text or '🎉 Шикарно' in update.message.text:
+            solved = re.search(r'Шикарно, .*\n\s([\s\w⬛️🟨🟩]+)Получно', update.message.text)
+            if solved:
+                words = [x.replace(' ', '') for x in solved.group(1).strip().split('\n')]
+                add_new_words(words[::2])
+            guessing = re.search(r'Попробуй угадать!.*\n\s([\s\w⬛️🟨🟩]+)Количество попыток', update.message.text)
+            if guessing:
+                words = [x.replace(' ', '') for x in guessing.group(1).strip().split('\n')]
+                add_new_words(words[::2])
+                words_chunks = ([words[i:i + 2] for i in range(0, len(words), 2)])
+
+                black_letter, yellow_letter, green_letter = [], {}, {}
+                for chunk in words_chunks:
+                    counter = 0
+                    for symbol in chunk[1].replace(' ', ''):
+                        if symbol in ['\u2B1B', '🟨', '🟩']:
+                            if symbol == '\u2B1B':
+                                black_letter.append(chunk[0][counter])
+                            elif symbol == '🟩':
+                                green_letter[counter] = chunk[0][counter]
+                            elif symbol == '🟨':
+                                if yellow_letter.get(counter):
+                                    yellow_letter[counter].append(chunk[0][counter])
+                                else:
+                                    yellow_letter[counter] = [chunk[0][counter]]
+                            counter += 1
+                black_letter = set(black_letter)
+                acceptable_words = word_examples(black_letter, green_letter, yellow_letter)
+                if acceptable_words:
+                    text = 'Попробуй {}'.format(', '.join(acceptable_words))
+                    context.bot.send_message(chat_id=chat_id, text=text)
                 else:
-                    text += '\nНекого пинговать'
-                context.bot.send_message(chat_id, text)
+                    context.bot.send_message(chat_id=chat_id, text='Нет вариантов😢')
+
 
     # alliance
-    if update.message.forward_from and update.message.forward_from.id == 265204902:
+    if update.message.forward_from and update.message.forward_from.id == cwbot_id:
         reg_name = r'You found hidden location ([\w\s\d]+.\d\d)'
         reg_code = r'То remember the route you associated it with simple combination: ([\w\d]+)'
         reg_alli = r'You found hidden headquarter (\w+\s+\w+)'
@@ -283,7 +288,7 @@ def trigger_me(update, context):
             spot_type = 'Glory'
         elif 'Ruins' in update.message.text:
             spot_type = 'Magic'
-        if update.message.forward_date < datetime(year=2021, month=4, day=1, hour=13, minute=0, second=0).replace(tzinfo=timezone.utc):
+        if update.message.forward_date < datetime(year=2022, month=9, day=1, hour=13, minute=0, second=0).replace(tzinfo=timezone.utc):
             text = 'Я тебе что шутка? Ищи новые.'
             context.bot.send_message(chat_id=chat_id, text=text, parse_mode='html')
         else:
@@ -296,9 +301,9 @@ def trigger_me(update, context):
                     context.bot.send_message(chat_id=chat_id, text=old_spot_text, parse_mode='html')
 
     # - gold
-    if update.message.forward_from and update.message.forward_from.id == 265204902:
+    if update.message.forward_from and update.message.forward_from.id == cwbot_id:
         reg_gold = r'💰Gold: -(\d+)'
-        if 'Твои результаты в бою:' in update.message.text:
+        if 'Твои результаты в бою:' in update.message.text or 'Your result on the battlefield:' in update.message.text:
             gold = re.search(reg_gold, update.message.text)
             if gold:
                 gold = int(gold.group(1))
@@ -322,15 +327,15 @@ def trigger_me(update, context):
 
                 # text = 'Атата. Ты знаешь сколько всего можно было купить на {}'.format(gold)
                 context.bot.send_message(chat_id=chat_id, text=random.choice(texts), parse_mode='html')
-        if 'Твои результаты в бою:' in update.message.text and ('🏅Enraged' in update.message.text or '🏅Peacekeeping' in update.message.text):
+        if ('Твои результаты в бою:' in update.message.text or 'Your result on the battlefield:' in update.message.text) and ('🏅Enraged' in update.message.text or '🏅Peacekeeping' in update.message.text):
             texts = ['Ого, грац с медалькой', 'Талантливого человека видно сразу', 'Так ты ещё и талантлив🥰']
             context.bot.send_message(chat_id=chat_id, text=random.choice(texts), parse_mode='html')
 
     # корован
-    if update.message.forward_from and update.message.forward_from.id == 265204902:
-        if 'Он пытается ограбить КОРОВАН' in update.message.text:
+    if update.message.forward_from and update.message.forward_from.id == cwbot_id:
+        if 'Он пытается ограбить КОРОВАН' in update.message.text or 'trying to pillage a local village' in update.message.text:
             context.bot.send_message(chat_id=chat_id, text='/go', parse_mode='html')
-        elif 'Ты задержал ' in update.message.text:
+        elif 'Ты задержал ' in update.message.text or 'You successfully defeated ' in update.message.text:
             texts = [
                 'молодец, волчара, так держать',
                 'хорош, теперь отгрызи ему голову',
@@ -339,7 +344,7 @@ def trigger_me(update, context):
                 'Хах! Поймал',
                 'Вижу в ДПС пошел?']
             context.bot.send_message(chat_id=chat_id, text=random.choice(texts), parse_mode='html')
-        elif 'Ты пытался остановить' in update.message.text:
+        elif 'Ты пытался остановить' in update.message.text or 'You tried stopping' in update.message.text:
             texts = [
                 'не расстраивайся, мы его еще догоним',
                 'ну 10 гп, это 10 гп',
@@ -349,7 +354,7 @@ def trigger_me(update, context):
             context.bot.send_message(chat_id=chat_id, text=random.choice(texts), parse_mode='html')
 
     # суслик
-    if update.message.forward_from and update.message.forward_from.id == 265204902:
+    if update.message.forward_from and update.message.forward_from.id == cwbot_id:
         if 'Ты пошел чесать своего суслика' in update.message.text:
             texts = [
                 'У суслика нет цели. Только путь.',
@@ -389,7 +394,7 @@ def trigger_me(update, context):
                 context.bot.send_message(chat_id=chat_id, text=random.choice(texts), parse_mode='html')
 
     # обижен сусликом
-    if update.message.forward_from and update.message.forward_from.id == 265204902:
+    if update.message.forward_from and update.message.forward_from.id == cwbot_id:
         if 'Обижен' in update.message.text or 'Измазан в грязи' in update.message.text:
             castle = None
             mobj = re.search('Обижен 🐾\w+ воина (?P<castle>.)\w+', update.message.text)
@@ -410,11 +415,10 @@ def trigger_me(update, context):
             context.bot.send_message(chat_id=chat_id, text=random.choice(texts), parse_mode='html')
 
     # reports
-    if update.message.forward_from and update.message.forward_from.id == 265204902:
-        if 'Твои результаты в бою:' in update.message.text and 'Встреча' not in update.message.text:
+    if update.message.forward_from and update.message.forward_from.id == cwbot_id:
+        if ('Твои результаты в бою:' in update.message.text or 'Your result on the battlefield:' in update.message.text) and ('Встреча' not in update.message.text and 'Encounter' not in update.message.text):
             date = date_to_cw_battle(update.message.forward_date)
-            import ipdb;ipdb.set_trace()
-            reg_nick = r'(🦇|🌹|🐢|🖤|🍆|🍁|☘️).\[\w+\]([\w\s_-]+)⚔|(🦇|🌹|🐢|🖤|🍆|🍁|☘️)([\w\s_-]+)⚔|(🦇|🌹|🐢|🖤|🍆|🍁|☘️)\[\w+\]([\w\s_-]+)⚔'
+            reg_nick = r'('+ '|'.join(castle_emoji) +').\[\w+\]([\w\s_-]+)⚔|('+ '|'.join(castle_emoji) +')([\w\s_-]+)⚔|(' + '|'.join(castle_emoji) + ')\[\w+\]([\w\s_-]+)⚔'
             nickname = re.match(reg_nick, update.message.text)
             if any(nickname.groups()):
                 nickname = [x.strip() for x in nickname.groups() if x is not None][1]
@@ -423,8 +427,10 @@ def trigger_me(update, context):
                 context.bot.send_message(chat_id=chat_id, text=old_report_text, parse_mode='html')
 
     # update top
-    if update.message.forward_from and update.message.forward_from.id == 265204902:
-        castles = ['🐢Тортуга', '🌹Замок Рассвета', '🍁Амбер', '🦇Ночной Замок', '🖤Скала', 'Past battles']
+    if update.message.forward_from and update.message.forward_from.id == cwbot_id:
+        # castles = ['🐢Тортуга', '🌹Замок Рассвета', '🍁Амбер', '🦇Ночной Замок', '🖤Скала', 'Past battles']
+        
+        castles = castle_full + ['Past battles']
         date = date_to_cw_battle(update.message.forward_date)
 
         if all([x in update.message.text for x in castles]):
@@ -457,7 +463,7 @@ def trigger_me(update, context):
                 if text:
                     context.bot.send_message(chat_id=mid_id, text=text, parse_mode='HTML')
 
-    if update.message.forward_from and update.message.forward_from.id == 265204902:
+    if update.message.forward_from and update.message.forward_from.id == cwbot_id:
         marks = ['Commander', '🎖Glory', '🏅Level']
         if all([x in update.message.text for x in marks]):
             tag_reg = r'(.)\[([\w\d]+)\]'
@@ -475,8 +481,9 @@ def trigger_me(update, context):
 
 
 def inline_button(update, context):
-    castles = ['🦇', '☘️', '🍁', '🍆', '🌹', '🖤', '🐢']
-    if update.callback_query.data in castles:
+    # castles = ['🦇', '☘️', '🍁', '🍆', '🌹', '🖤', '🐢']
+    # castles = ['🌑', '🐺', '🥔', '🐉', '🦈', '🦌', '🦅']
+    if update.callback_query.data in castle_emoji:
         emodji = update.callback_query.data
         if emodji == '☘️':
             emodji = '☘'
@@ -655,10 +662,11 @@ def calculate_atak(update, context):
     chat_id = update.message.chat_id
     if update.message.reply_to_message:
         message = update.message.reply_to_message
-        if message.forward_from and message.forward_from.id == 265204902 and 'Твои результаты в бою:' in message.text:
+        if message.forward_from and message.forward_from.id == cwbot_id and (
+                'Твои результаты в бою:' in message.text or 'Your result on the battlefield:' in message.text):
             m_text = message.text
             m_date = date_to_cw_battle(message.forward_date)
-            re_atk = r'⚔:(?P<atk>\d+).* 🛡:(?P<def>\d+)'
+            re_atk = r'⚔️:(?P<atk>\d+).* 🛡:(?P<def>\d+)'
             re_gold = r'💰Gold: (?P<gold>[-\d]+)'
 
             e = re.search(re_atk, m_text)
@@ -680,10 +688,11 @@ def calculate_atak(update, context):
             else:
                 return
 
-        castles = ['🦇', '☘️', '🍁', '🍆', '🌹', '🖤', '🐢']
+        # castles = ['🦇', '☘️', '🍁', '🍆', '🌹', '🖤', '🐢']
+        # castles = ['🌑', '🐺', '🥔', '🐉', '🦈', '🦌', '🦅']
         keyboard = []
         row = []
-        for castle in castles:
+        for castle in castle_emoji:
             if len(row) > 3:
                 keyboard.append(row)
                 row = []
@@ -696,6 +705,28 @@ def calculate_atak(update, context):
             chat_id=chat_id,
             text=text,
             reply_markup=reply_markup)
+    else:
+        text = 'Не вижу куда, сделай reply'
+        context.bot.send_message(chat_id=chat_id, text=text)
+
+def sort_jewerly(update, context):
+    message = update.message
+    chat_id = update.message.chat_id
+    if update.message.reply_to_message:
+        message = update.message.reply_to_message
+        if message.forward_from and message.forward_from.id == cwbot_id and 'Guild Warehouse:' in message.text:
+            m_text = message.text
+            jewerly_reg = r'(u\d+ (?:..)?Mystery (?:ring|amulet) lvl.(\d+)[\s\d:.↑↓%\-🏹⚗️🎩⚔️🛡🩸📦🛠(Def|Hp|Atk|Mana)]+)'
+            mobj = re.findall(jewerly_reg, m_text)
+            if mobj:
+                from operator import itemgetter
+                mobj = sorted(mobj, key=itemgetter(1), reverse=True)
+                text = ''
+                for obj in mobj:
+                    text += obj[0] + '\n'
+                context.bot.send_message(
+                    chat_id=chat_id,
+                    text=text)
     else:
         text = 'Не вижу куда, сделай reply'
         context.bot.send_message(chat_id=chat_id, text=text)
@@ -722,42 +753,45 @@ def main():
     dp = updater.dispatcher
 
     # on different commands - answer in Telegram
-    dp.add_handler(CommandHandler("start", start))
-    dp.add_handler(CommandHandler("reports", reports))
-    dp.add_handler(CommandHandler("me", me))
+    dp.add_handler(CommandHandler("add_mobu", add_mobu))
     dp.add_handler(CommandHandler("auth", auth))
-    dp.add_handler(CommandHandler("wtb", wtb))
-    dp.add_handler(CommandHandler("profile", profile))
-    dp.add_handler(CommandHandler("update_profile", update_profile))
-    dp.add_handler(CommandHandler("gs", gold_rules))
-    dp.add_handler(CommandHandler("spend", spend_my_gold))
-    dp.add_handler(CommandHandler("stock", stock))
-    dp.add_handler(CommandHandler("auth_stock", auth_stock))
-    dp.add_handler(CommandHandler("gs_enable", gs_enable))
-    dp.add_handler(CommandHandler("gs_disable", gs_disable))
+    dp.add_handler(CommandHandler("auth_gear", auth_gear))
     dp.add_handler(CommandHandler("auth_guild", auth_guild))
-    dp.add_handler(CommandHandler("guild", guild))
+    dp.add_handler(CommandHandler("auth_stock", auth_stock))
     dp.add_handler(CommandHandler("a_guilds", a_guilds))
     dp.add_handler(CommandHandler("a_spots", a_spots))
-    dp.add_handler(CommandHandler("worldtop", worldtop))
-    dp.add_handler(CommandHandler("wtop", wtop))
-    dp.add_handler(CommandHandler("qtop", qtop))
-    dp.add_handler(CommandHandler("calc", calculate_atak))
-    dp.add_handler(CommandHandler("spot", find_spot))
-    dp.add_handler(CommandHandler("delspot", del_spot))
-    dp.add_handler(CommandHandler("whois", whois))
-    dp.add_handler(CommandHandler("dug", myguild_duels))
-    dp.add_handler(CommandHandler("du", myduels))
-    dp.add_handler(CommandHandler("guilds", guilds))
-    dp.add_handler(CommandHandler("users", users))
-    dp.add_handler(CommandHandler("gear", gear))
-    dp.add_handler(CommandHandler("auth_gear", auth_gear))
-    dp.add_handler(CommandHandler("update_gear", update_gear))
-    dp.add_handler(CommandHandler("sell_enable", sell_enable))
-    dp.add_handler(CommandHandler("sell_disable", sell_disable))
     dp.add_handler(CommandHandler("as_enable", as_enable))
     dp.add_handler(CommandHandler("as_disable", as_disable))
-    dp.add_handler(CommandHandler("add_mobu", add_mobu))
+    dp.add_handler(CommandHandler("calc", calculate_atak))
+    dp.add_handler(CommandHandler("du", myduels))
+    dp.add_handler(CommandHandler("dug", myguild_duels))
+    dp.add_handler(CommandHandler("delspot", del_spot))
+    dp.add_handler(CommandHandler("gear", gear))
+    dp.add_handler(CommandHandler("guild", guild))
+    dp.add_handler(CommandHandler("guilds", guilds))
+    dp.add_handler(CommandHandler("gs", gold_rules))
+    dp.add_handler(CommandHandler("gs_enable", gs_enable))
+    dp.add_handler(CommandHandler("gs_disable", gs_disable))
+    dp.add_handler(CommandHandler("me", me))
+    dp.add_handler(CommandHandler("profile", profile))
+    dp.add_handler(CommandHandler("qtop", qtop))
+    dp.add_handler(CommandHandler("reports", reports))
+    dp.add_handler(CommandHandler("sell_disable", sell_disable))
+    dp.add_handler(CommandHandler("sell_enable", sell_enable))
+    dp.add_handler(CommandHandler('sort', sort_jewerly))
+    dp.add_handler(CommandHandler("spot", find_spot))
+    dp.add_handler(CommandHandler("spend", spend_my_gold))
+    dp.add_handler(CommandHandler("start", start))
+    dp.add_handler(CommandHandler("stock", stock))
+    dp.add_handler(CommandHandler("update_profile", update_profile))
+    dp.add_handler(CommandHandler("update_gear", update_gear))
+    dp.add_handler(CommandHandler("users", users))
+    dp.add_handler(CommandHandler("whois", whois))
+    dp.add_handler(CommandHandler("worldtop", worldtop))
+    dp.add_handler(CommandHandler("wtb", wtb))
+    dp.add_handler(CommandHandler("wtop", wtop))
+    SHEAR_REGEX = r'\/battles(?:_(\d+))?(?: (\S+))?(?: (\S+))?'
+    dp.add_handler(MessageHandler(Filters.text & Filters.regex(SHEAR_REGEX), shear_top))
 
     # sub guilds for glory
     dp.add_handler(CommandHandler("sub_guild", sub_guild))
@@ -766,6 +800,8 @@ def main():
 
     dp.add_handler(InlineQueryHandler(inlinequery))
     dp.add_handler(ChosenInlineResultHandler(on_result_chosen))
+
+    dp.add_handler(CommandHandler("add_word", add_word))
 
     # on noncommand i.e message - echo the message on Telegram
     dp.add_handler(MessageHandler(Filters.text & Filters.regex(r'\+\+time \d\d:\d\d'), add_time_trigger))
